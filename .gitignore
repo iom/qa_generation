@@ -1,0 +1,9 @@
+.venv
+.env
+_extensions/
+.luarc.json
+
+lancedb_data/
+lancedb_data_qa/
+pdf_documents/
+/.luarc.json

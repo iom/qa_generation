@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.39">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Edouard Legoupil, Chief Data Officer, IOM">
+<meta name="dcterms.date" content="2025-05-09">
+
+<title>Automated PDF Q&amp;A Generation with Azure OpenAI</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="index_files/libs/clipboard/clipboard.min.js"></script>
+<script src="index_files/libs/quarto-html/quarto.js"></script>
+<script src="index_files/libs/quarto-html/popper.min.js"></script>
+<script src="index_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="index_files/libs/quarto-html/anchor.min.js"></script>
+<link href="index_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="index_files/libs/quarto-html/quarto-syntax-highlighting-0626ff4d7a71b55c8707dcae1d04a9b6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="index_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="index_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="index_files/libs/bootstrap/bootstrap-e32a626c8e9c95d1b95290327a4672e3.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<style>html{ scroll-behavior: smooth; }</style>
+
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#why-extract-qa-from-pdfs" id="toc-why-extract-qa-from-pdfs" class="nav-link active" data-scroll-target="#why-extract-qa-from-pdfs">Why Extract Q&amp;A from PDFs?</a></li>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#environment-set-up" id="toc-environment-set-up" class="nav-link" data-scroll-target="#environment-set-up">Environment Set up</a></li>
+  <li><a href="#search-for-pdf-url" id="toc-search-for-pdf-url" class="nav-link" data-scroll-target="#search-for-pdf-url">Search for PDF URL</a></li>
+  <li><a href="#load-pdf-from-url" id="toc-load-pdf-from-url" class="nav-link" data-scroll-target="#load-pdf-from-url">Load PDF from URL</a></li>
+  <li><a href="#initialize-azure-openai-components" id="toc-initialize-azure-openai-components" class="nav-link" data-scroll-target="#initialize-azure-openai-components">Initialize Azure OpenAI Components</a></li>
+  <li><a href="#automatic-question-generation" id="toc-automatic-question-generation" class="nav-link" data-scroll-target="#automatic-question-generation">Automatic Question Generation</a></li>
+  <li><a href="#create-knowledge-base" id="toc-create-knowledge-base" class="nav-link" data-scroll-target="#create-knowledge-base">Create Knowledge Base</a></li>
+  <li><a href="#set-up-information-retriver" id="toc-set-up-information-retriver" class="nav-link" data-scroll-target="#set-up-information-retriver">Set up Information Retriver</a></li>
+  <li><a href="#run-all-questions" id="toc-run-all-questions" class="nav-link" data-scroll-target="#run-all-questions">Run all questions</a></li>
+  <li><a href="#export" id="toc-export" class="nav-link" data-scroll-target="#export">Export</a>
+  <ul class="collapse">
+  <li><a href="#as-json-to-be-used-as-a-crewai-knowledge-base" id="toc-as-json-to-be-used-as-a-crewai-knowledge-base" class="nav-link" data-scroll-target="#as-json-to-be-used-as-a-crewai-knowledge-base">As json to be used as a crewai knowledge base</a></li>
+  <li><a href="#hugging-face-for-data-labelingg" id="toc-hugging-face-for-data-labelingg" class="nav-link" data-scroll-target="#hugging-face-for-data-labelingg">Hugging Face for data labelingg</a></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Automated PDF Q&amp;A Generation with Azure OpenAI</h1>
+<p class="subtitle lead">Technical Approach Paper for Knowledge Base Creation</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Edouard Legoupil, Chief Data Officer, IOM </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">9 May 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="why-extract-qa-from-pdfs" class="level2">
+<h2 class="anchored" data-anchor-id="why-extract-qa-from-pdfs">Why Extract Q&amp;A from PDFs?</h2>
+<p>PDF documents contain valuable knowledge—research papers, manuals, reports, and more—but their static format makes information retrieval inefficient.</p>
+<p>Extracting information from PDFs using traditional search or summarization methods can often miss deeper insights.</p>
+<p>By generating Question-Answer (Q&amp;A) pairs, we explicitly transform passive content into active knowledge.</p>
+<p>By transforming PDF content into a question-answering (Q&amp;A) knowledge base, you enable:</p>
+<ol type="1">
+<li><p>Instant, Precise Information Retrieval</p>
+<p>Instead of manually searching through pages, users can ask natural language questions and get direct answers with source references.</p>
+<p>Ideal for technical documentation, legal contracts, or academic papers where quick lookup is critical.</p></li>
+<li><p>Scalable Knowledge Management</p>
+<p>Automatically process hundreds of PDFs into a structured, queryable format.</p>
+<p>Maintain versioned knowledge bases (e.g., updated policy documents or research findings).</p></li>
+<li><p>AI-Augmented Understanding</p>
+<p>LLMs (like Azure OpenAI) summarize, connect concepts, and clarify dense text.</p>
+<p>Helps users grasp key points without reading entire documents.</p></li>
+<li><p>Integration with Chatbots &amp; Assistants</p>
+<p>Deploy the Q&amp;A system in help desks, internal wikis, or customer support via APIs.</p>
+<p>Example: Quick lookup of medical guidelines from research PDFs.</p></li>
+<li><p>Future-Proofing Knowledge</p>
+<p>Export structured Q&amp;A pairs to platforms like Hugging Face for community use or fine-tuning smaller models.</p></li>
+</ol>
+</section>
+<section id="introduction" class="level2">
+<h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
+<p>Key Features</p>
+<pre><code>Automatic Question Generation: Uses LLM to create relevant questions from document content
+
+Context-Aware Q&amp;A: Maintains document context for each generated question
+
+Two-Stage LLM Processing:
+
+    Creative mode (higher temp) for question generation
+
+    Accurate mode (lower temp) for answer generation
+
+Comprehensive Metadata: Tracks sources, pages, and context for all Q&amp;A pairs
+
+HuggingFace-Ready Export: Structured JSON output with dataset statistics
+
+Interactive Mode: For manual exploration of documents</code></pre>
+<hr>
+</section>
+<section id="environment-set-up" class="level2">
+<h2 class="anchored" data-anchor-id="environment-set-up">Environment Set up</h2>
+<p>The body of this document targets a technical audience. Below are all the codes so that the whole process can be reproduced and audited. This assume to use the following code within <a href="https://code.visualstudio.com/">Visual Studio Code</a>.</p>
+<p>First we need to use a virtual environment in Python development. This is essential for managing dependencies, avoiding conflicts, and ensuring reproducibility. It allows you to isolate project-specific libraries and versions, preventing interference with other projects or the global Python installation. This isolation helps maintain a clean development environment, simplifies project setup for collaborators, and enhances security by reducing the risk of introducing vulnerabilities. Overall, virtual environments provide a consistent and organized way to manage your Python projects effectively.</p>
+<p>Make sure to install the last <a href="https://www.python.org/downloads/">stable version of python language</a> and create a dedicated python environment to have a fresh install where to manage correctly all the dependencies between packages. To specify a particular version of Python when creating a virtual environment, you can use the full path to the desired Python executable. Here is how you can do it:</p>
+<p>Open your terminal (Command Prompt, PowerShell, or any terminal emulator).</p>
+<p>Navigate to your project directory where you want to create the virtual environment.</p>
+<p>Run the following command to create a virtual environment,here called <strong><code>.venv</code></strong>:</p>
+<pre class="{bash}"><code>#| eval: false 
+python -m venv .venv</code></pre>
+<p>Then, activate the virtual environment:</p>
+<pre class="{bash}"><code>#| eval: false
+.\.venv\Scripts\activate</code></pre>
+<p>Then, configure visual Studio Code to use the virtual environment: Open the Command Palette using the shortcut <code>Ctrl+Shift+P</code> and type <code>Jupyter: Select Interpreter</code> and select the interpreter that corresponds to your newly created virtual environment: <code>('venv': venv)</code>.</p>
+<p>Once this environment selected as a kernel to run the notebook, we can install the required python modules the rest of the process:</p>
+<div id="502b4473" class="cell" data-execution_count="1">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>pip install pypdf langchain langchain<span class="op">-</span>community openai lancedb python<span class="op">-</span>dotenv tqdm datasets pdfplumber ipywidgets langchain_openai googlesearch<span class="op">-</span>python tantivy pylance</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>then Restart the jupyter kernel for this notebook</p>
+<div id="5b93acc5" class="cell" data-execution_count="2">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="op">%</span>reset <span class="op">-</span>f</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="search-for-pdf-url" class="level2">
+<h2 class="anchored" data-anchor-id="search-for-pdf-url">Search for PDF URL</h2>
+<div id="3ba69826" class="cell" data-execution_count="3">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> datetime <span class="im">import</span> datetime</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> googlesearch <span class="im">import</span> search</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> requests</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> bs4 <span class="im">import</span> BeautifulSoup</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> find_official_pdfs(query, num_results<span class="op">=</span><span class="dv">20</span>):</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Search for official PDF documents related to migration regulations"""</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    pdf_urls <span class="op">=</span> []</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    search_query <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>query<span class="sc">}</span><span class="ss"> filetype:pdf site:.gov OR site:.org OR site:.int"</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Searching for: </span><span class="sc">{</span>search_query<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> url <span class="kw">in</span> search(search_query, num_results<span class="op">=</span>num_results, advanced<span class="op">=</span><span class="va">True</span>):</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> url.url.lower().endswith(<span class="st">'.pdf'</span>):</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Verify it's an official source</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> <span class="bu">any</span>(domain <span class="kw">in</span> url.url <span class="cf">for</span> domain <span class="kw">in</span> [<span class="st">'.gov'</span>, <span class="st">'.org'</span>, <span class="st">'.int'</span>, <span class="st">'unhcr'</span>, <span class="st">'iom'</span>]):</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>                    <span class="bu">print</span>(<span class="ss">f"Found PDF: </span><span class="sc">{</span>url<span class="sc">.</span>url<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>                    pdf_urls.append(url.url)</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>                    </span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Search error: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pdf_urls</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> generate_json_output(urls):</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Generate the JSON structure"""</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> {</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">"name"</span>: <span class="st">"Official Migration Regulations"</span>,</span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>        <span class="st">"description"</span>: <span class="st">"Collection of official government PDF documents detailing migration pathways and regulations"</span>,</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>        <span class="st">"urls"</span>: urls,</span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>        <span class="st">"last_updated"</span>: datetime.now().isoformat(),</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>        <span class="st">"sources"</span>: [</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Government websites"</span>,</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>            <span class="st">"International organizations"</span>,</span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>            <span class="st">"UN agencies"</span></span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>        ]</span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>    }</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Let’s test this!</p>
+<div id="52d3038d" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>queries <span class="op">=</span> [</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"official migration pathways PDF"</span>,</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"government immigration regulations filetype:pdf"</span>,</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"legal migration routes document"</span>,</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"national visa policy PDF"</span>,</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"resettlement programs official document"</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>all_urls <span class="op">=</span> []</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> query <span class="kw">in</span> queries:</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    all_urls.extend(find_official_pdfs(query))</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Remove duplicates</span></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>unique_urls <span class="op">=</span> <span class="bu">list</span>(<span class="bu">set</span>(all_urls))</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate JSON</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>output_data <span class="op">=</span> generate_json_output(unique_urls)</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(<span class="st">"migration_regulations.json"</span>, <span class="st">"w"</span>) <span class="im">as</span> f:</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    json.dump(output_data, f, indent<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Generated JSON file with </span><span class="sc">{</span><span class="bu">len</span>(unique_urls)<span class="sc">}</span><span class="ss"> PDF URLs"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="load-pdf-from-url" class="level2">
+<h2 class="anchored" data-anchor-id="load-pdf-from-url">Load PDF from URL</h2>
+<div id="066c8818" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> requests</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> urllib.parse <span class="im">import</span> urlparse</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> download_pdfs_from_json(json_path, save_folder):</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Create folder if it doesn't exist</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    os.makedirs(save_folder, exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Load JSON data</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> <span class="bu">open</span>(json_path, <span class="st">'r'</span>) <span class="im">as</span> <span class="bu">file</span>:</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>        data <span class="op">=</span> json.load(<span class="bu">file</span>)</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Get the list of URLs</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    urls <span class="op">=</span> data.get(<span class="st">"urls"</span>, [])</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> urls:</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="st">"No URLs found in the JSON."</span>)</span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Download each PDF</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> url <span class="kw">in</span> urls:</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span>:</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>            response <span class="op">=</span> requests.get(url, stream<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>            response.raise_for_status()</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Extract filename from URL</span></span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>            parsed_url <span class="op">=</span> urlparse(url)</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>            filename <span class="op">=</span> os.path.basename(parsed_url.path)</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Full path to save the file</span></span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>            save_path <span class="op">=</span> os.path.join(save_folder, filename)</span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>            <span class="cf">with</span> <span class="bu">open</span>(save_path, <span class="st">'wb'</span>) <span class="im">as</span> f:</span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> chunk <span class="kw">in</span> response.iter_content(chunk_size<span class="op">=</span><span class="dv">8192</span>):</span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a>                    f.write(chunk)</span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"Downloaded: </span><span class="sc">{</span>save_path<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>        <span class="cf">except</span> requests.exceptions.RequestException <span class="im">as</span> e:</span>
+<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"Failed to download from </span><span class="sc">{</span>url<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="b1532b45" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">## test</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>pdf_urls_file <span class="op">=</span> <span class="st">"pdf_urls.json"</span>  <span class="co"># JSON file containing PDF URLs</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>pdf_folder <span class="op">=</span> <span class="st">"pdf_documents"</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Load PDF URLs</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Example usage:</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>download_pdfs_from_json(pdf_urls_file, pdf_folder)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="initialize-azure-openai-components" class="level2">
+<h2 class="anchored" data-anchor-id="initialize-azure-openai-components">Initialize Azure OpenAI Components</h2>
+<div id="10ec06d8" class="cell" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> dotenv <span class="im">import</span> load_dotenv</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Load environment variables</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>load_dotenv()</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Azure OpenAI settings</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>azure_openai_key <span class="op">=</span> os.getenv(<span class="st">"AZURE_OPENAI_API_KEY"</span>)</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>azure_openai_endpoint <span class="op">=</span> os.getenv(<span class="st">"AZURE_OPENAI_ENDPOINT"</span>)</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>deployment_name <span class="op">=</span> os.getenv(<span class="st">"AZURE_DEPLOYMENT_NAME"</span>)</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>api_version <span class="op">=</span> os.getenv(<span class="st">"AZURE_OPENAI_API_VERSION"</span>)</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>embedding_deployment <span class="op">=</span> os.getenv(<span class="st">"EMBEDDING_MODEL"</span>)</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>api_version_embed <span class="op">=</span> os.getenv(<span class="st">"AZURE_OPENAI_API_VERSION_EMBED"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="b97ea1b9" class="cell" data-execution_count="8">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_openai <span class="im">import</span> AzureChatOpenAI </span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Initialize LLM with higher temperature for creative question generation</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>llm_creative <span class="op">=</span> AzureChatOpenAI(</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    deployment_name<span class="op">=</span>deployment_name,</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    api_key<span class="op">=</span>azure_openai_key,</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    azure_endpoint<span class="op">=</span>azure_openai_endpoint,</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    api_version<span class="op">=</span>api_version,</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    temperature<span class="op">=</span><span class="fl">0.7</span>,</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>    max_tokens<span class="op">=</span><span class="dv">500</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>llm_accurate <span class="op">=</span> AzureChatOpenAI(</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>    deployment_name<span class="op">=</span>deployment_name,</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    api_key<span class="op">=</span>azure_openai_key,</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    azure_endpoint<span class="op">=</span>azure_openai_endpoint,</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    api_version<span class="op">=</span>api_version,</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>    temperature<span class="op">=</span><span class="fl">0.1</span>,</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>    max_tokens<span class="op">=</span><span class="dv">1000</span></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Initialize embeddings</span></span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_openai <span class="im">import</span> AzureOpenAIEmbeddings</span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>embeddings <span class="op">=</span> AzureOpenAIEmbeddings(</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>    deployment<span class="op">=</span>embedding_deployment,</span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>    api_key<span class="op">=</span>azure_openai_key,</span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>    azure_endpoint<span class="op">=</span>azure_openai_endpoint,</span>
+<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    api_version<span class="op">=</span>api_version_embed,</span>
+<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>    chunk_size<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Testing API…</p>
+<div id="c1fc83e8" class="cell" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># First, verify your Azure OpenAI resources</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Verifying Azure OpenAI resources..."</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Endpoint: </span><span class="sc">{</span>azure_openai_endpoint<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Deployment Name: </span><span class="sc">{</span>deployment_name<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_openai <span class="im">import</span> AzureChatOpenAI  <span class="co"># Changed from AzureOpenAI</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_core.messages <span class="im">import</span> HumanMessage</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Initialize with enhanced error handling</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>:</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Initialize LLMs with validation</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    llm_creative <span class="op">=</span> AzureChatOpenAI(</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        deployment_name<span class="op">=</span>deployment_name,</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>        api_key<span class="op">=</span>azure_openai_key,</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        azure_endpoint<span class="op">=</span>azure_openai_endpoint,</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        api_version<span class="op">=</span>api_version,</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>        temperature<span class="op">=</span><span class="fl">0.7</span></span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Test the LLM connection</span></span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>    test_response <span class="op">=</span> llm_creative.invoke([HumanMessage(content<span class="op">=</span><span class="st">"Hello"</span>)])</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"LLM test successful! Response type:"</span>, <span class="bu">type</span>(test_response))</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"Response content:"</span>, test_response.content)</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Failed to initialize Azure OpenAI LLM: </span><span class="sc">{</span><span class="bu">str</span>(e)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"Please verify:"</span>)</span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"1. Your deployment exists in Azure OpenAI Studio"</span>)</span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"2. The deployment name matches exactly"</span>)</span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"3. The model is assigned to the deployment"</span>)</span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"4. Your API key has permissions"</span>)</span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">raise</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>and embedding…</p>
+<div id="3a696127" class="cell" data-execution_count="10">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Embedding Deployment: </span><span class="sc">{</span>embedding_deployment<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>:</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Initialize embeddings with validation</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>    embeddings <span class="op">=</span> AzureOpenAIEmbeddings(</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>        deployment<span class="op">=</span>embedding_deployment,</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>        api_key<span class="op">=</span>azure_openai_key,</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>        azure_endpoint<span class="op">=</span>azure_openai_endpoint,</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>        api_version<span class="op">=</span>api_version,</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        chunk_size<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Test embeddings</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    test_embedding <span class="op">=</span> embeddings.embed_query(<span class="st">"Test embedding"</span>)</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"Embeddings connection test successful!"</span>)</span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Embedding vector length: </span><span class="sc">{</span><span class="bu">len</span>(test_embedding)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Failed to initialize Azure OpenAI Embeddings: </span><span class="sc">{</span><span class="bu">str</span>(e)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"Please verify your embedding deployment exists"</span>)</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">raise</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="automatic-question-generation" class="level2">
+<h2 class="anchored" data-anchor-id="automatic-question-generation">Automatic Question Generation</h2>
+<div id="fd905589" class="cell" data-execution_count="11">
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> logging</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pdfplumber</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> warnings</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> tqdm <span class="im">import</span> tqdm</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> List, Dict, Tuple</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> concurrent.futures <span class="im">import</span> ThreadPoolExecutor, as_completed</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Configure logging</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>logging.basicConfig(level<span class="op">=</span>logging.INFO, <span class="bu">format</span><span class="op">=</span><span class="st">'</span><span class="sc">%(asctime)s</span><span class="st"> - </span><span class="sc">%(levelname)s</span><span class="st"> - </span><span class="sc">%(message)s</span><span class="st">'</span>)</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>logger <span class="op">=</span> logging.getLogger(<span class="va">__name__</span>)</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Constants</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>MIN_SECTION_LENGTH <span class="op">=</span> <span class="dv">200</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>MAX_ERRORS <span class="op">=</span> <span class="dv">5</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>RATE_LIMIT_DELAY <span class="op">=</span> <span class="fl">0.5</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>MAX_WORKERS <span class="op">=</span> <span class="dv">4</span>  <span class="co"># Adjust based on your system capabilities</span></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> process_pdf_page(page, filename: <span class="bu">str</span>, page_num: <span class="bu">int</span>, question_chain, min_section_length: <span class="bu">int</span>) <span class="op">-&gt;</span> Tuple[List[Dict], List[Dict]]:</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Process a single PDF page and generate questions."""</span></span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>    documents <span class="op">=</span> []</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>    questions <span class="op">=</span> []</span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>        text <span class="op">=</span> page.extract_text()</span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> text <span class="kw">or</span> <span class="bu">len</span>(text.strip()) <span class="op">&lt;</span> min_section_length:</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> documents, questions</span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a>        time.sleep(RATE_LIMIT_DELAY)</span>
+<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Invoke LLM</span></span>
+<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a>        response <span class="op">=</span> question_chain.invoke({<span class="st">"text"</span>: text})</span>
+<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Debug: Print raw response</span></span>
+<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a>        logger.debug(<span class="ss">f"Raw LLM response for </span><span class="sc">{</span>filename<span class="sc">}</span><span class="ss"> page </span><span class="sc">{</span>page_num<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>response<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Debug: Print raw response</span></span>
+<span id="cb14-39"><a href="#cb14-39" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Raw LLM response: </span><span class="sc">{</span>response<span class="sc">}</span><span class="ss">"</span>)  <span class="co"># Add this line to see what's being returned</span></span>
+<span id="cb14-40"><a href="#cb14-40" aria-hidden="true" tabindex="-1"></a>      </span>
+<span id="cb14-41"><a href="#cb14-41" aria-hidden="true" tabindex="-1"></a>        questions_list <span class="op">=</span> []</span>
+<span id="cb14-42"><a href="#cb14-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-43"><a href="#cb14-43" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Case 1: If response is a dictionary and contains a 'text' key with embedded JSON</span></span>
+<span id="cb14-44"><a href="#cb14-44" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">isinstance</span>(response, <span class="bu">dict</span>) <span class="kw">and</span> <span class="st">"text"</span> <span class="kw">in</span> response:</span>
+<span id="cb14-45"><a href="#cb14-45" aria-hidden="true" tabindex="-1"></a>            <span class="cf">try</span>:</span>
+<span id="cb14-46"><a href="#cb14-46" aria-hidden="true" tabindex="-1"></a>                embedded_json <span class="op">=</span> response[<span class="st">"text"</span>]</span>
+<span id="cb14-47"><a href="#cb14-47" aria-hidden="true" tabindex="-1"></a>                response_dict <span class="op">=</span> json.loads(embedded_json)</span>
+<span id="cb14-48"><a href="#cb14-48" aria-hidden="true" tabindex="-1"></a>                questions_list <span class="op">=</span> response_dict.get(<span class="st">"questions"</span>, [])</span>
+<span id="cb14-49"><a href="#cb14-49" aria-hidden="true" tabindex="-1"></a>            <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb14-50"><a href="#cb14-50" aria-hidden="true" tabindex="-1"></a>                logger.warning(<span class="ss">f"Failed to parse embedded JSON in response for </span><span class="sc">{</span>filename<span class="sc">}</span><span class="ss"> page </span><span class="sc">{</span>page_num<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-51"><a href="#cb14-51" aria-hidden="true" tabindex="-1"></a>                logger.debug(<span class="ss">f"Raw embedded JSON: </span><span class="sc">{</span>response[<span class="st">'text'</span>]<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-52"><a href="#cb14-52" aria-hidden="true" tabindex="-1"></a>                questions_list <span class="op">=</span> []</span>
+<span id="cb14-53"><a href="#cb14-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-54"><a href="#cb14-54" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Case 2: If response has a `.text` attribute (LangChain format)</span></span>
+<span id="cb14-55"><a href="#cb14-55" aria-hidden="true" tabindex="-1"></a>        <span class="cf">elif</span> <span class="bu">hasattr</span>(response, <span class="st">'text'</span>):</span>
+<span id="cb14-56"><a href="#cb14-56" aria-hidden="true" tabindex="-1"></a>            response_text <span class="op">=</span> response.text.strip()</span>
+<span id="cb14-57"><a href="#cb14-57" aria-hidden="true" tabindex="-1"></a>            <span class="cf">try</span>:</span>
+<span id="cb14-58"><a href="#cb14-58" aria-hidden="true" tabindex="-1"></a>                response_dict <span class="op">=</span> json.loads(response_text)</span>
+<span id="cb14-59"><a href="#cb14-59" aria-hidden="true" tabindex="-1"></a>                questions_list <span class="op">=</span> response_dict.get(<span class="st">"questions"</span>, [])</span>
+<span id="cb14-60"><a href="#cb14-60" aria-hidden="true" tabindex="-1"></a>            <span class="cf">except</span> json.JSONDecodeError:</span>
+<span id="cb14-61"><a href="#cb14-61" aria-hidden="true" tabindex="-1"></a>                <span class="cf">try</span>:</span>
+<span id="cb14-62"><a href="#cb14-62" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">if</span> <span class="st">'```json'</span> <span class="kw">in</span> response_text:</span>
+<span id="cb14-63"><a href="#cb14-63" aria-hidden="true" tabindex="-1"></a>                        json_str <span class="op">=</span> response_text.split(<span class="st">'```json'</span>)[<span class="dv">1</span>].split(<span class="st">'```'</span>)[<span class="dv">0</span>]</span>
+<span id="cb14-64"><a href="#cb14-64" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">else</span>:</span>
+<span id="cb14-65"><a href="#cb14-65" aria-hidden="true" tabindex="-1"></a>                        json_str <span class="op">=</span> response_text</span>
+<span id="cb14-66"><a href="#cb14-66" aria-hidden="true" tabindex="-1"></a>                    response_dict <span class="op">=</span> json.loads(json_str)</span>
+<span id="cb14-67"><a href="#cb14-67" aria-hidden="true" tabindex="-1"></a>                    questions_list <span class="op">=</span> response_dict.get(<span class="st">"questions"</span>, [])</span>
+<span id="cb14-68"><a href="#cb14-68" aria-hidden="true" tabindex="-1"></a>                <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> inner_e:</span>
+<span id="cb14-69"><a href="#cb14-69" aria-hidden="true" tabindex="-1"></a>                    logger.warning(<span class="ss">f"Failed to parse fallback JSON from LLM response on </span><span class="sc">{</span>filename<span class="sc">}</span><span class="ss"> page </span><span class="sc">{</span>page_num<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>inner_e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-70"><a href="#cb14-70" aria-hidden="true" tabindex="-1"></a>                    logger.debug(<span class="ss">f"Raw fallback: </span><span class="sc">{</span>response_text<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-71"><a href="#cb14-71" aria-hidden="true" tabindex="-1"></a>                    questions_list <span class="op">=</span> []</span>
+<span id="cb14-72"><a href="#cb14-72" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-73"><a href="#cb14-73" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Sanity check</span></span>
+<span id="cb14-74"><a href="#cb14-74" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(questions_list, <span class="bu">list</span>):</span>
+<span id="cb14-75"><a href="#cb14-75" aria-hidden="true" tabindex="-1"></a>            questions_list <span class="op">=</span> []</span>
+<span id="cb14-76"><a href="#cb14-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-77"><a href="#cb14-77" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Build question entries</span></span>
+<span id="cb14-78"><a href="#cb14-78" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> q <span class="kw">in</span> questions_list:</span>
+<span id="cb14-79"><a href="#cb14-79" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> <span class="bu">isinstance</span>(q, <span class="bu">str</span>) <span class="kw">and</span> q.strip():</span>
+<span id="cb14-80"><a href="#cb14-80" aria-hidden="true" tabindex="-1"></a>                questions.append({</span>
+<span id="cb14-81"><a href="#cb14-81" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"question"</span>: q.strip(),</span>
+<span id="cb14-82"><a href="#cb14-82" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"source"</span>: filename,</span>
+<span id="cb14-83"><a href="#cb14-83" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"page"</span>: page_num,</span>
+<span id="cb14-84"><a href="#cb14-84" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"context"</span>: text[:<span class="dv">500</span>] <span class="op">+</span> <span class="st">"..."</span></span>
+<span id="cb14-85"><a href="#cb14-85" aria-hidden="true" tabindex="-1"></a>                })</span>
+<span id="cb14-86"><a href="#cb14-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-87"><a href="#cb14-87" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> questions:</span>
+<span id="cb14-88"><a href="#cb14-88" aria-hidden="true" tabindex="-1"></a>            documents.append({</span>
+<span id="cb14-89"><a href="#cb14-89" aria-hidden="true" tabindex="-1"></a>                <span class="st">"text"</span>: text,</span>
+<span id="cb14-90"><a href="#cb14-90" aria-hidden="true" tabindex="-1"></a>                <span class="st">"source"</span>: filename,</span>
+<span id="cb14-91"><a href="#cb14-91" aria-hidden="true" tabindex="-1"></a>                <span class="st">"page"</span>: page_num</span>
+<span id="cb14-92"><a href="#cb14-92" aria-hidden="true" tabindex="-1"></a>            })</span>
+<span id="cb14-93"><a href="#cb14-93" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb14-94"><a href="#cb14-94" aria-hidden="true" tabindex="-1"></a>            logger.warning(<span class="ss">f"No valid questions extracted for </span><span class="sc">{</span>filename<span class="sc">}</span><span class="ss"> page </span><span class="sc">{</span>page_num<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-95"><a href="#cb14-95" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-96"><a href="#cb14-96" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb14-97"><a href="#cb14-97" aria-hidden="true" tabindex="-1"></a>        logger.error(<span class="ss">f"Error processing </span><span class="sc">{</span>filename<span class="sc">}</span><span class="ss"> page </span><span class="sc">{</span>page_num<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span><span class="bu">str</span>(e)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-98"><a href="#cb14-98" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-99"><a href="#cb14-99" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> documents, questions</span>
+<span id="cb14-100"><a href="#cb14-100" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-101"><a href="#cb14-101" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> process_pdf_file(pdf_path: <span class="bu">str</span>, question_chain, min_section_length: <span class="bu">int</span>) <span class="op">-&gt;</span> Tuple[List[Dict], List[Dict]]:</span>
+<span id="cb14-102"><a href="#cb14-102" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Process a single PDF file with parallel page processing."""</span></span>
+<span id="cb14-103"><a href="#cb14-103" aria-hidden="true" tabindex="-1"></a>    all_documents <span class="op">=</span> []</span>
+<span id="cb14-104"><a href="#cb14-104" aria-hidden="true" tabindex="-1"></a>    all_questions <span class="op">=</span> []</span>
+<span id="cb14-105"><a href="#cb14-105" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-106"><a href="#cb14-106" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb14-107"><a href="#cb14-107" aria-hidden="true" tabindex="-1"></a>        <span class="cf">with</span> pdfplumber.<span class="bu">open</span>(pdf_path) <span class="im">as</span> pdf:</span>
+<span id="cb14-108"><a href="#cb14-108" aria-hidden="true" tabindex="-1"></a>            filename <span class="op">=</span> os.path.basename(pdf_path)</span>
+<span id="cb14-109"><a href="#cb14-109" aria-hidden="true" tabindex="-1"></a>            total_pages <span class="op">=</span> <span class="bu">len</span>(pdf.pages)</span>
+<span id="cb14-110"><a href="#cb14-110" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-111"><a href="#cb14-111" aria-hidden="true" tabindex="-1"></a>            <span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span><span class="bu">min</span>(MAX_WORKERS, total_pages)) <span class="im">as</span> executor:</span>
+<span id="cb14-112"><a href="#cb14-112" aria-hidden="true" tabindex="-1"></a>                futures <span class="op">=</span> []</span>
+<span id="cb14-113"><a href="#cb14-113" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> page_num, page <span class="kw">in</span> <span class="bu">enumerate</span>(pdf.pages, start<span class="op">=</span><span class="dv">1</span>):</span>
+<span id="cb14-114"><a href="#cb14-114" aria-hidden="true" tabindex="-1"></a>                    futures.append(</span>
+<span id="cb14-115"><a href="#cb14-115" aria-hidden="true" tabindex="-1"></a>                        executor.submit(</span>
+<span id="cb14-116"><a href="#cb14-116" aria-hidden="true" tabindex="-1"></a>                            process_pdf_page,</span>
+<span id="cb14-117"><a href="#cb14-117" aria-hidden="true" tabindex="-1"></a>                            page<span class="op">=</span>page,</span>
+<span id="cb14-118"><a href="#cb14-118" aria-hidden="true" tabindex="-1"></a>                            filename<span class="op">=</span>filename,</span>
+<span id="cb14-119"><a href="#cb14-119" aria-hidden="true" tabindex="-1"></a>                            page_num<span class="op">=</span>page_num,</span>
+<span id="cb14-120"><a href="#cb14-120" aria-hidden="true" tabindex="-1"></a>                            question_chain<span class="op">=</span>question_chain,</span>
+<span id="cb14-121"><a href="#cb14-121" aria-hidden="true" tabindex="-1"></a>                            min_section_length<span class="op">=</span>min_section_length</span>
+<span id="cb14-122"><a href="#cb14-122" aria-hidden="true" tabindex="-1"></a>                        )</span>
+<span id="cb14-123"><a href="#cb14-123" aria-hidden="true" tabindex="-1"></a>                    )</span>
+<span id="cb14-124"><a href="#cb14-124" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-125"><a href="#cb14-125" aria-hidden="true" tabindex="-1"></a>                <span class="cf">for</span> future <span class="kw">in</span> as_completed(futures):</span>
+<span id="cb14-126"><a href="#cb14-126" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">try</span>:</span>
+<span id="cb14-127"><a href="#cb14-127" aria-hidden="true" tabindex="-1"></a>                        docs, qs <span class="op">=</span> future.result()</span>
+<span id="cb14-128"><a href="#cb14-128" aria-hidden="true" tabindex="-1"></a>                        all_documents.extend(docs)</span>
+<span id="cb14-129"><a href="#cb14-129" aria-hidden="true" tabindex="-1"></a>                        all_questions.extend(qs)</span>
+<span id="cb14-130"><a href="#cb14-130" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb14-131"><a href="#cb14-131" aria-hidden="true" tabindex="-1"></a>                        logger.error(<span class="ss">f"Error processing future: </span><span class="sc">{</span><span class="bu">str</span>(e)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-132"><a href="#cb14-132" aria-hidden="true" tabindex="-1"></a>                        <span class="cf">continue</span></span>
+<span id="cb14-133"><a href="#cb14-133" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-134"><a href="#cb14-134" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb14-135"><a href="#cb14-135" aria-hidden="true" tabindex="-1"></a>        logger.error(<span class="ss">f"Failed to process PDF </span><span class="sc">{</span>pdf_path<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span><span class="bu">str</span>(e)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-136"><a href="#cb14-136" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-137"><a href="#cb14-137" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> all_documents, all_questions</span>
+<span id="cb14-138"><a href="#cb14-138" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-139"><a href="#cb14-139" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> process_and_generate_questions(</span>
+<span id="cb14-140"><a href="#cb14-140" aria-hidden="true" tabindex="-1"></a>    pdf_folder: <span class="bu">str</span>,</span>
+<span id="cb14-141"><a href="#cb14-141" aria-hidden="true" tabindex="-1"></a>    question_chain,</span>
+<span id="cb14-142"><a href="#cb14-142" aria-hidden="true" tabindex="-1"></a>    min_section_length: <span class="bu">int</span> <span class="op">=</span> MIN_SECTION_LENGTH,</span>
+<span id="cb14-143"><a href="#cb14-143" aria-hidden="true" tabindex="-1"></a>    suppress_warnings: <span class="bu">bool</span> <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb14-144"><a href="#cb14-144" aria-hidden="true" tabindex="-1"></a>    max_workers: <span class="bu">int</span> <span class="op">=</span> MAX_WORKERS</span>
+<span id="cb14-145"><a href="#cb14-145" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Tuple[List[Dict], List[Dict]]:</span>
+<span id="cb14-146"><a href="#cb14-146" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb14-147"><a href="#cb14-147" aria-hidden="true" tabindex="-1"></a><span class="co">    Process all PDFs in a folder and generate questions using an LLM chain.</span></span>
+<span id="cb14-148"><a href="#cb14-148" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb14-149"><a href="#cb14-149" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> suppress_warnings:</span>
+<span id="cb14-150"><a href="#cb14-150" aria-hidden="true" tabindex="-1"></a>        warnings.filterwarnings(<span class="st">"ignore"</span>, category<span class="op">=</span><span class="pp">UserWarning</span>, module<span class="op">=</span><span class="st">"pdfplumber"</span>)</span>
+<span id="cb14-151"><a href="#cb14-151" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-152"><a href="#cb14-152" aria-hidden="true" tabindex="-1"></a>    pdf_files <span class="op">=</span> [</span>
+<span id="cb14-153"><a href="#cb14-153" aria-hidden="true" tabindex="-1"></a>        os.path.join(pdf_folder, f)</span>
+<span id="cb14-154"><a href="#cb14-154" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> f <span class="kw">in</span> os.listdir(pdf_folder)</span>
+<span id="cb14-155"><a href="#cb14-155" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> f.lower().endswith(<span class="st">'.pdf'</span>)</span>
+<span id="cb14-156"><a href="#cb14-156" aria-hidden="true" tabindex="-1"></a>    ]</span>
+<span id="cb14-157"><a href="#cb14-157" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-158"><a href="#cb14-158" aria-hidden="true" tabindex="-1"></a>    all_documents <span class="op">=</span> []</span>
+<span id="cb14-159"><a href="#cb14-159" aria-hidden="true" tabindex="-1"></a>    all_questions <span class="op">=</span> []</span>
+<span id="cb14-160"><a href="#cb14-160" aria-hidden="true" tabindex="-1"></a>    error_count <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb14-161"><a href="#cb14-161" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-162"><a href="#cb14-162" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span>max_workers) <span class="im">as</span> executor:</span>
+<span id="cb14-163"><a href="#cb14-163" aria-hidden="true" tabindex="-1"></a>        futures <span class="op">=</span> {</span>
+<span id="cb14-164"><a href="#cb14-164" aria-hidden="true" tabindex="-1"></a>            executor.submit(</span>
+<span id="cb14-165"><a href="#cb14-165" aria-hidden="true" tabindex="-1"></a>                process_pdf_file,</span>
+<span id="cb14-166"><a href="#cb14-166" aria-hidden="true" tabindex="-1"></a>                pdf_path<span class="op">=</span>pdf_path,</span>
+<span id="cb14-167"><a href="#cb14-167" aria-hidden="true" tabindex="-1"></a>                question_chain<span class="op">=</span>question_chain,</span>
+<span id="cb14-168"><a href="#cb14-168" aria-hidden="true" tabindex="-1"></a>                min_section_length<span class="op">=</span>min_section_length</span>
+<span id="cb14-169"><a href="#cb14-169" aria-hidden="true" tabindex="-1"></a>            ): pdf_path <span class="cf">for</span> pdf_path <span class="kw">in</span> pdf_files</span>
+<span id="cb14-170"><a href="#cb14-170" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb14-171"><a href="#cb14-171" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-172"><a href="#cb14-172" aria-hidden="true" tabindex="-1"></a>        <span class="cf">with</span> tqdm(total<span class="op">=</span><span class="bu">len</span>(pdf_files), desc<span class="op">=</span><span class="st">"Processing PDFs"</span>) <span class="im">as</span> pbar:</span>
+<span id="cb14-173"><a href="#cb14-173" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> future <span class="kw">in</span> as_completed(futures):</span>
+<span id="cb14-174"><a href="#cb14-174" aria-hidden="true" tabindex="-1"></a>                pdf_path <span class="op">=</span> futures[future]</span>
+<span id="cb14-175"><a href="#cb14-175" aria-hidden="true" tabindex="-1"></a>                <span class="cf">try</span>:</span>
+<span id="cb14-176"><a href="#cb14-176" aria-hidden="true" tabindex="-1"></a>                    docs, qs <span class="op">=</span> future.result()</span>
+<span id="cb14-177"><a href="#cb14-177" aria-hidden="true" tabindex="-1"></a>                    all_documents.extend(docs)</span>
+<span id="cb14-178"><a href="#cb14-178" aria-hidden="true" tabindex="-1"></a>                    all_questions.extend(qs)</span>
+<span id="cb14-179"><a href="#cb14-179" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-180"><a href="#cb14-180" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">if</span> <span class="kw">not</span> qs:</span>
+<span id="cb14-181"><a href="#cb14-181" aria-hidden="true" tabindex="-1"></a>                        logger.warning(<span class="ss">f"No questions generated for </span><span class="sc">{</span>os<span class="sc">.</span>path<span class="sc">.</span>basename(pdf_path)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-182"><a href="#cb14-182" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">else</span>:</span>
+<span id="cb14-183"><a href="#cb14-183" aria-hidden="true" tabindex="-1"></a>                        error_count <span class="op">=</span> <span class="dv">0</span>  <span class="co"># Reset on success</span></span>
+<span id="cb14-184"><a href="#cb14-184" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-185"><a href="#cb14-185" aria-hidden="true" tabindex="-1"></a>                <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb14-186"><a href="#cb14-186" aria-hidden="true" tabindex="-1"></a>                    logger.error(<span class="ss">f"Error processing </span><span class="sc">{</span>pdf_path<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span><span class="bu">str</span>(e)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb14-187"><a href="#cb14-187" aria-hidden="true" tabindex="-1"></a>                    error_count <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb14-188"><a href="#cb14-188" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">if</span> error_count <span class="op">&gt;=</span> MAX_ERRORS:</span>
+<span id="cb14-189"><a href="#cb14-189" aria-hidden="true" tabindex="-1"></a>                        logger.error(<span class="ss">f"Stopping after </span><span class="sc">{</span>MAX_ERRORS<span class="sc">}</span><span class="ss"> consecutive errors"</span>)</span>
+<span id="cb14-190"><a href="#cb14-190" aria-hidden="true" tabindex="-1"></a>                        executor.shutdown(wait<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb14-191"><a href="#cb14-191" aria-hidden="true" tabindex="-1"></a>                        <span class="cf">break</span></span>
+<span id="cb14-192"><a href="#cb14-192" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-193"><a href="#cb14-193" aria-hidden="true" tabindex="-1"></a>                pbar.update(<span class="dv">1</span>)</span>
+<span id="cb14-194"><a href="#cb14-194" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-195"><a href="#cb14-195" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> all_documents, all_questions</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Now the prompt to generate the questions!</p>
+<div id="56e3f6d3" class="cell" data-execution_count="12">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain.prompts <span class="im">import</span> PromptTemplate</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain.chains <span class="im">import</span> LLMChain</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Define prompt for question generation</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>question_prompt <span class="op">=</span> PromptTemplate(</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    input_variables<span class="op">=</span>[<span class="st">"text"</span>],</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    template<span class="op">=</span><span class="st">"""</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="st">    Analyze the following text and generate 3-5 relevant questions that this text could answer.</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="st">    **Important**: </span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="st">        - The questions should cover different aspects of the content and be of varying complexity.</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a><span class="st">        - The questions should reflect the document end-user perspective or interest, and avoid jargon</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="st">        - Focus on key concepts, findings, methodologies, and important details.</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="st">        - The questions should remain generic in the formulation and do not refer to specific elements within the content (like according to a specific chapter or reference number)</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="st">    Return ONLY this JSON format:</span></span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="st">    </span><span class="sc">{{</span></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="st">        "questions": [</span></span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a><span class="st">            "question1",</span></span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="st">            "question2", </span></span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a><span class="st">            "question3"</span></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a><span class="st">        ]</span></span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a><span class="st">    </span><span class="sc">}}</span></span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a><span class="st">    Text: </span><span class="sc">{text}</span></span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a><span class="st">    </span></span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a><span class="st">    """</span></span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a><span class="co"># Initialize question generation chain</span></span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>question_chain <span class="op">=</span> LLMChain(llm<span class="op">=</span>llm_creative, prompt<span class="op">=</span>question_prompt)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Now generating!</p>
+<div id="75f69776" class="cell" data-execution_count="13">
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>pdf_folder <span class="op">=</span> <span class="st">"pdf_documents/"</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>min_section_length <span class="op">=</span> <span class="dv">500</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Process PDFs and generate questions</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>documents, generated_questions <span class="op">=</span> process_and_generate_questions(pdf_folder, question_chain, min_section_length) </span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f" </span><span class="sc">{</span><span class="bu">len</span>(generated_questions)<span class="sc">}</span><span class="ss"> questions were generated !!"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="7919a940" class="cell" data-execution_count="14">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>output_path <span class="op">=</span> <span class="st">"questions_UN_staff.json"</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(output_path, <span class="st">"w"</span>, encoding<span class="op">=</span><span class="st">"utf-8"</span>) <span class="im">as</span> f:</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    json.dump(generated_questions, f, indent<span class="op">=</span><span class="dv">2</span>, ensure_ascii<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="create-knowledge-base" class="level2">
+<h2 class="anchored" data-anchor-id="create-knowledge-base">Create Knowledge Base</h2>
+<div id="d80a5dd9" class="cell" data-execution_count="15">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> shutil</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> atexit</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> concurrent.futures <span class="im">import</span> ThreadPoolExecutor</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain.text_splitter <span class="im">import</span> RecursiveCharacterTextSplitter</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain.vectorstores <span class="im">import</span> LanceDB</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> lancedb</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> process_document(doc, text_splitter):</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Helper function to process a single document in parallel"""</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    chunks <span class="op">=</span> text_splitter.split_text(doc[<span class="st">"text"</span>])</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    metadatas <span class="op">=</span> [{<span class="st">"source"</span>: doc[<span class="st">"source"</span>], <span class="st">"page"</span>: doc[<span class="st">"page"</span>]} <span class="cf">for</span> _ <span class="kw">in</span> chunks]</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> chunks, metadatas</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> force_delete_directory(path, max_retries<span class="op">=</span><span class="dv">3</span>, delay<span class="op">=</span><span class="dv">1</span>):</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Robust directory deletion with retries and delay"""</span></span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> attempt <span class="kw">in</span> <span class="bu">range</span>(max_retries):</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span>:</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> os.path.exists(path):</span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>                shutil.rmtree(path)</span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>        <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> attempt <span class="op">==</span> max_retries <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a>                <span class="bu">print</span>(<span class="ss">f"Failed to delete </span><span class="sc">{</span>path<span class="sc">}</span><span class="ss"> after </span><span class="sc">{</span>max_retries<span class="sc">}</span><span class="ss"> attempts: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>                <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>            time.sleep(delay)</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cleanup_lancedb_directory(db_path, table_name):</span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Safely remove existing LanceDB table directory"""</span></span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>    table_path <span class="op">=</span> os.path.join(db_path, <span class="ss">f"</span><span class="sc">{</span>table_name<span class="sc">}</span><span class="ss">.lance"</span>)</span>
+<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a>    <span class="co"># First try normal deletion</span></span>
+<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> force_delete_directory(table_path):</span>
+<span id="cb18-36"><a href="#cb18-36" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span></span>
+<span id="cb18-37"><a href="#cb18-37" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-38"><a href="#cb18-38" aria-hidden="true" tabindex="-1"></a>    <span class="co"># If normal deletion fails, try renaming</span></span>
+<span id="cb18-39"><a href="#cb18-39" aria-hidden="true" tabindex="-1"></a>    temp_path <span class="op">=</span> <span class="ss">f"</span><span class="sc">{</span>table_path<span class="sc">}</span><span class="ss">.old_</span><span class="sc">{</span><span class="bu">int</span>(time.time())<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb18-40"><a href="#cb18-40" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb18-41"><a href="#cb18-41" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> os.path.exists(table_path):</span>
+<span id="cb18-42"><a href="#cb18-42" aria-hidden="true" tabindex="-1"></a>            os.rename(table_path, temp_path)</span>
+<span id="cb18-43"><a href="#cb18-43" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"Renamed </span><span class="sc">{</span>table_path<span class="sc">}</span><span class="ss"> to </span><span class="sc">{</span>temp_path<span class="sc">}</span><span class="ss"> for deferred cleanup"</span>)</span>
+<span id="cb18-44"><a href="#cb18-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-45"><a href="#cb18-45" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Could not rename </span><span class="sc">{</span>table_path<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb18-46"><a href="#cb18-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-47"><a href="#cb18-47" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> create_knowledge_base(documents, chunk_size, chunk_overlap, lancedb_path, embeddings, max_workers<span class="op">=</span><span class="dv">4</span>):</span>
+<span id="cb18-48"><a href="#cb18-48" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Create vector store with comprehensive error handling"""</span></span>
+<span id="cb18-49"><a href="#cb18-49" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Initialize text splitter</span></span>
+<span id="cb18-50"><a href="#cb18-50" aria-hidden="true" tabindex="-1"></a>    text_splitter <span class="op">=</span> RecursiveCharacterTextSplitter(</span>
+<span id="cb18-51"><a href="#cb18-51" aria-hidden="true" tabindex="-1"></a>        chunk_size<span class="op">=</span>chunk_size,</span>
+<span id="cb18-52"><a href="#cb18-52" aria-hidden="true" tabindex="-1"></a>        chunk_overlap<span class="op">=</span>chunk_overlap,</span>
+<span id="cb18-53"><a href="#cb18-53" aria-hidden="true" tabindex="-1"></a>        separators<span class="op">=</span>[<span class="st">"</span><span class="ch">\n\n</span><span class="st">"</span>, <span class="st">"</span><span class="ch">\n</span><span class="st">"</span>, <span class="st">". "</span>, <span class="st">"! "</span>, <span class="st">"? "</span>, <span class="st">" "</span>, <span class="st">""</span>],</span>
+<span id="cb18-54"><a href="#cb18-54" aria-hidden="true" tabindex="-1"></a>        length_function<span class="op">=</span><span class="bu">len</span>,</span>
+<span id="cb18-55"><a href="#cb18-55" aria-hidden="true" tabindex="-1"></a>        keep_separator<span class="op">=</span><span class="va">True</span></span>
+<span id="cb18-56"><a href="#cb18-56" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb18-57"><a href="#cb18-57" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-58"><a href="#cb18-58" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Parallel processing of documents</span></span>
+<span id="cb18-59"><a href="#cb18-59" aria-hidden="true" tabindex="-1"></a>    texts <span class="op">=</span> []</span>
+<span id="cb18-60"><a href="#cb18-60" aria-hidden="true" tabindex="-1"></a>    metadatas <span class="op">=</span> []</span>
+<span id="cb18-61"><a href="#cb18-61" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span>max_workers) <span class="im">as</span> executor:</span>
+<span id="cb18-62"><a href="#cb18-62" aria-hidden="true" tabindex="-1"></a>        futures <span class="op">=</span> []</span>
+<span id="cb18-63"><a href="#cb18-63" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> doc <span class="kw">in</span> documents:</span>
+<span id="cb18-64"><a href="#cb18-64" aria-hidden="true" tabindex="-1"></a>            futures.append(executor.submit(process_document, doc, text_splitter))</span>
+<span id="cb18-65"><a href="#cb18-65" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb18-66"><a href="#cb18-66" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> future <span class="kw">in</span> futures:</span>
+<span id="cb18-67"><a href="#cb18-67" aria-hidden="true" tabindex="-1"></a>            chunks, doc_metadatas <span class="op">=</span> future.result()</span>
+<span id="cb18-68"><a href="#cb18-68" aria-hidden="true" tabindex="-1"></a>            texts.extend(chunks)</span>
+<span id="cb18-69"><a href="#cb18-69" aria-hidden="true" tabindex="-1"></a>            metadatas.extend(doc_metadatas)</span>
+<span id="cb18-70"><a href="#cb18-70" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-71"><a href="#cb18-71" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Handle LanceDB connection with robust cleanup</span></span>
+<span id="cb18-72"><a href="#cb18-72" aria-hidden="true" tabindex="-1"></a>    table_name <span class="op">=</span> <span class="st">"pdf_qa_vectors"</span></span>
+<span id="cb18-73"><a href="#cb18-73" aria-hidden="true" tabindex="-1"></a>    cleanup_lancedb_directory(lancedb_path, table_name)</span>
+<span id="cb18-74"><a href="#cb18-74" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-75"><a href="#cb18-75" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Add delay to ensure filesystem operations complete</span></span>
+<span id="cb18-76"><a href="#cb18-76" aria-hidden="true" tabindex="-1"></a>    time.sleep(<span class="dv">1</span>)</span>
+<span id="cb18-77"><a href="#cb18-77" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-78"><a href="#cb18-78" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb18-79"><a href="#cb18-79" aria-hidden="true" tabindex="-1"></a>        db <span class="op">=</span> lancedb.<span class="ex">connect</span>(lancedb_path)</span>
+<span id="cb18-80"><a href="#cb18-80" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-81"><a href="#cb18-81" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">RuntimeError</span>(<span class="ss">f"Failed to connect to LanceDB at </span><span class="sc">{</span>lancedb_path<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb18-82"><a href="#cb18-82" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-83"><a href="#cb18-83" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Create vector store with retry logic</span></span>
+<span id="cb18-84"><a href="#cb18-84" aria-hidden="true" tabindex="-1"></a>    max_retries <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb18-85"><a href="#cb18-85" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> attempt <span class="kw">in</span> <span class="bu">range</span>(max_retries):</span>
+<span id="cb18-86"><a href="#cb18-86" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span>:</span>
+<span id="cb18-87"><a href="#cb18-87" aria-hidden="true" tabindex="-1"></a>            vector_store <span class="op">=</span> LanceDB.from_texts(</span>
+<span id="cb18-88"><a href="#cb18-88" aria-hidden="true" tabindex="-1"></a>                texts<span class="op">=</span>texts,</span>
+<span id="cb18-89"><a href="#cb18-89" aria-hidden="true" tabindex="-1"></a>                embedding<span class="op">=</span>embeddings,</span>
+<span id="cb18-90"><a href="#cb18-90" aria-hidden="true" tabindex="-1"></a>                metadatas<span class="op">=</span>metadatas,</span>
+<span id="cb18-91"><a href="#cb18-91" aria-hidden="true" tabindex="-1"></a>                connection<span class="op">=</span>db,</span>
+<span id="cb18-92"><a href="#cb18-92" aria-hidden="true" tabindex="-1"></a>                table_name<span class="op">=</span>table_name,</span>
+<span id="cb18-93"><a href="#cb18-93" aria-hidden="true" tabindex="-1"></a>                vector_key<span class="op">=</span><span class="st">"vector"</span>,</span>
+<span id="cb18-94"><a href="#cb18-94" aria-hidden="true" tabindex="-1"></a>                text_key<span class="op">=</span><span class="st">"text"</span>,</span>
+<span id="cb18-95"><a href="#cb18-95" aria-hidden="true" tabindex="-1"></a>                id_key<span class="op">=</span><span class="st">"id"</span></span>
+<span id="cb18-96"><a href="#cb18-96" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb18-97"><a href="#cb18-97" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb18-98"><a href="#cb18-98" aria-hidden="true" tabindex="-1"></a>        <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-99"><a href="#cb18-99" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> attempt <span class="op">==</span> max_retries <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb18-100"><a href="#cb18-100" aria-hidden="true" tabindex="-1"></a>                <span class="cf">raise</span> <span class="pp">RuntimeError</span>(<span class="ss">f"Failed to create LanceDB table after </span><span class="sc">{</span>max_retries<span class="sc">}</span><span class="ss"> attempts: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb18-101"><a href="#cb18-101" aria-hidden="true" tabindex="-1"></a>            time.sleep(<span class="dv">2</span>)</span>
+<span id="cb18-102"><a href="#cb18-102" aria-hidden="true" tabindex="-1"></a>            cleanup_lancedb_directory(lancedb_path, table_name)</span>
+<span id="cb18-103"><a href="#cb18-103" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-104"><a href="#cb18-104" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Get the underlying table</span></span>
+<span id="cb18-105"><a href="#cb18-105" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb18-106"><a href="#cb18-106" aria-hidden="true" tabindex="-1"></a>        table <span class="op">=</span> db.open_table(table_name)</span>
+<span id="cb18-107"><a href="#cb18-107" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-108"><a href="#cb18-108" aria-hidden="true" tabindex="-1"></a>        <span class="cf">raise</span> <span class="pp">RuntimeError</span>(<span class="ss">f"Failed to open table </span><span class="sc">{</span>table_name<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb18-109"><a href="#cb18-109" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-110"><a href="#cb18-110" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Create vector index with retry logic</span></span>
+<span id="cb18-111"><a href="#cb18-111" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> attempt <span class="kw">in</span> <span class="bu">range</span>(max_retries):</span>
+<span id="cb18-112"><a href="#cb18-112" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span>:</span>
+<span id="cb18-113"><a href="#cb18-113" aria-hidden="true" tabindex="-1"></a>            table.create_index(</span>
+<span id="cb18-114"><a href="#cb18-114" aria-hidden="true" tabindex="-1"></a>                metric<span class="op">=</span><span class="st">"cosine"</span>,</span>
+<span id="cb18-115"><a href="#cb18-115" aria-hidden="true" tabindex="-1"></a>                num_partitions<span class="op">=</span><span class="dv">256</span>,</span>
+<span id="cb18-116"><a href="#cb18-116" aria-hidden="true" tabindex="-1"></a>                num_sub_vectors<span class="op">=</span><span class="dv">96</span>,</span>
+<span id="cb18-117"><a href="#cb18-117" aria-hidden="true" tabindex="-1"></a>                replace<span class="op">=</span><span class="va">True</span></span>
+<span id="cb18-118"><a href="#cb18-118" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb18-119"><a href="#cb18-119" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb18-120"><a href="#cb18-120" aria-hidden="true" tabindex="-1"></a>        <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb18-121"><a href="#cb18-121" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> attempt <span class="op">==</span> max_retries <span class="op">-</span> <span class="dv">1</span>:</span>
+<span id="cb18-122"><a href="#cb18-122" aria-hidden="true" tabindex="-1"></a>                <span class="bu">print</span>(<span class="ss">f"Warning: Could not create vector index: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb18-123"><a href="#cb18-123" aria-hidden="true" tabindex="-1"></a>            time.sleep(<span class="dv">1</span>)</span>
+<span id="cb18-124"><a href="#cb18-124" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-125"><a href="#cb18-125" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Skip FTS index creation to avoid Windows file locking issues</span></span>
+<span id="cb18-126"><a href="#cb18-126" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">"Skipping FTS index creation due to known Windows file locking issues"</span>)</span>
+<span id="cb18-127"><a href="#cb18-127" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-128"><a href="#cb18-128" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> vector_store</span>
+<span id="cb18-129"><a href="#cb18-129" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-130"><a href="#cb18-130" aria-hidden="true" tabindex="-1"></a><span class="co"># Register cleanup function for program exit</span></span>
+<span id="cb18-131"><a href="#cb18-131" aria-hidden="true" tabindex="-1"></a><span class="at">@atexit.register</span></span>
+<span id="cb18-132"><a href="#cb18-132" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> cleanup_temp_dirs():</span>
+<span id="cb18-133"><a href="#cb18-133" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Clean up any leftover .old directories"""</span></span>
+<span id="cb18-134"><a href="#cb18-134" aria-hidden="true" tabindex="-1"></a>    now <span class="op">=</span> time.time()</span>
+<span id="cb18-135"><a href="#cb18-135" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> os.path.exists(lancedb_path):</span>
+<span id="cb18-136"><a href="#cb18-136" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> dirname <span class="kw">in</span> os.listdir(lancedb_path):</span>
+<span id="cb18-137"><a href="#cb18-137" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> dirname.startswith(<span class="st">'pdf_qa_vectors.lance.old_'</span>):</span>
+<span id="cb18-138"><a href="#cb18-138" aria-hidden="true" tabindex="-1"></a>                dirpath <span class="op">=</span> os.path.join(lancedb_path, dirname)</span>
+<span id="cb18-139"><a href="#cb18-139" aria-hidden="true" tabindex="-1"></a>                <span class="cf">try</span>:</span>
+<span id="cb18-140"><a href="#cb18-140" aria-hidden="true" tabindex="-1"></a>                    <span class="co"># Delete directories older than 1 hour</span></span>
+<span id="cb18-141"><a href="#cb18-141" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">if</span> os.path.getmtime(dirpath) <span class="op">&lt;</span> now <span class="op">-</span> <span class="dv">3600</span>:</span>
+<span id="cb18-142"><a href="#cb18-142" aria-hidden="true" tabindex="-1"></a>                        shutil.rmtree(dirpath, ignore_errors<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb18-143"><a href="#cb18-143" aria-hidden="true" tabindex="-1"></a>                <span class="cf">except</span>:</span>
+<span id="cb18-144"><a href="#cb18-144" aria-hidden="true" tabindex="-1"></a>                    <span class="cf">pass</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="4ee7823f" class="cell" data-execution_count="16">
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>lancedb_path <span class="op">=</span> <span class="st">"./lancedb_data_qa"</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>embeddings<span class="op">=</span> embeddings</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>os.makedirs(lancedb_path, exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create knowledge base</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>chunk_size <span class="op">=</span> <span class="dv">300</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>chunk_overlap <span class="op">=</span> <span class="dv">200</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>vector_store <span class="op">=</span> create_knowledge_base(documents, chunk_size, chunk_overlap, lancedb_path, embeddings, max_workers<span class="op">=</span><span class="dv">4</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="164025e9" class="cell" data-execution_count="17">
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co">#print(vector_store.indexes())</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">dir</span>(vector_store))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="b81ea006" class="cell" data-execution_count="18">
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Check if 'vector' or other similar methods exist</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">dir</span>(search))  <span class="co"># This will list methods available on `search`</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="f108bebe" class="cell" data-execution_count="19">
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Search for a query</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>query <span class="op">=</span> <span class="st">"How are staff recruited?"</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Perform search</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> vector_store.similarity_search(query, k<span class="op">=</span><span class="dv">5</span>)  <span class="co"># k is the number of results to return</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Print the results</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Top matching documents for query '</span><span class="sc">{</span>query<span class="sc">}</span><span class="ss">':"</span>)</span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, res <span class="kw">in</span> <span class="bu">enumerate</span>(result):</span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>i<span class="op">+</span><span class="dv">1</span><span class="sc">}</span><span class="ss">. Source: </span><span class="sc">{</span>res[<span class="st">'metadata'</span>][<span class="st">'source'</span>]<span class="sc">}</span><span class="ss">, Page: </span><span class="sc">{</span>res[<span class="st">'metadata'</span>][<span class="st">'page'</span>]<span class="sc">}</span><span class="ss">, </span></span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="er">    # Check for text content under possible attribute names</span></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>        text <span class="op">=</span> <span class="bu">getattr</span>(res, <span class="st">'text'</span>, <span class="va">None</span>) <span class="kw">or</span> <span class="bu">getattr</span>(res, <span class="st">'page_content'</span>, <span class="va">None</span>) <span class="kw">or</span> <span class="bu">getattr</span>(res, <span class="st">'content'</span>, <span class="st">'No Text'</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="b268a6f0" class="cell" data-execution_count="20">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Verify if the index is built correctly</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>:</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>    index_status <span class="op">=</span> vector_store.check_index_status()</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Index status: </span><span class="sc">{</span>index_status<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Error checking index status: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="4ab24e87" class="cell" data-execution_count="21">
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>result <span class="op">=</span> vector_store.similarity_search(query, k<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Ensure the result is not empty</span></span>
+<span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> result:</span>
+<span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Top matching documents for query '</span><span class="sc">{</span>query<span class="sc">}</span><span class="ss">':"</span>)</span>
+<span id="cb24-6"><a href="#cb24-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i, res <span class="kw">in</span> <span class="bu">enumerate</span>(result):</span>
+<span id="cb24-7"><a href="#cb24-7" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Access metadata directly</span></span>
+<span id="cb24-8"><a href="#cb24-8" aria-hidden="true" tabindex="-1"></a>        source <span class="op">=</span> res.metadata.get(<span class="st">'source'</span>, <span class="st">'Unknown'</span>)  <span class="co"># Metadata access</span></span>
+<span id="cb24-9"><a href="#cb24-9" aria-hidden="true" tabindex="-1"></a>        page <span class="op">=</span> res.metadata.get(<span class="st">'page'</span>, <span class="st">'Unknown'</span>)  <span class="co"># Metadata access</span></span>
+<span id="cb24-10"><a href="#cb24-10" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb24-11"><a href="#cb24-11" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Check for text content under possible attribute names</span></span>
+<span id="cb24-12"><a href="#cb24-12" aria-hidden="true" tabindex="-1"></a>        text <span class="op">=</span> <span class="bu">getattr</span>(res, <span class="st">'text'</span>, <span class="va">None</span>) <span class="kw">or</span> <span class="bu">getattr</span>(res, <span class="st">'page_content'</span>, <span class="va">None</span>) <span class="kw">or</span> <span class="bu">getattr</span>(res, <span class="st">'content'</span>, <span class="st">'No Text'</span>)</span>
+<span id="cb24-13"><a href="#cb24-13" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb24-14"><a href="#cb24-14" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>i<span class="op">+</span><span class="dv">1</span><span class="sc">}</span><span class="ss">. Source: </span><span class="sc">{</span>source<span class="sc">}</span><span class="ss">, Page: </span><span class="sc">{</span>page<span class="sc">}</span><span class="ss">, Text: </span><span class="sc">{</span>text<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
+<span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"No results found for query: </span><span class="sc">{</span>query<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="9fc5df4b" class="cell" data-execution_count="22">
+<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> test_vector_store(vector_store, query, k<span class="op">=</span><span class="dv">5</span>):</span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Test the vector store by performing a similarity search and printing results."""</span></span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> vector_store.similarity_search(query, k<span class="op">=</span>k)</span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> result:</span>
+<span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"Top matching documents for query '</span><span class="sc">{</span>query<span class="sc">}</span><span class="ss">':"</span>)</span>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> i, res <span class="kw">in</span> <span class="bu">enumerate</span>(result):</span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Access metadata</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>                source <span class="op">=</span> res.metadata.get(<span class="st">'source'</span>, <span class="st">'Unknown'</span>)</span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a>                page <span class="op">=</span> res.metadata.get(<span class="st">'page'</span>, <span class="st">'Unknown'</span>)</span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Try to access the text from the most likely fields</span></span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>                text <span class="op">=</span> <span class="bu">getattr</span>(res, <span class="st">'text'</span>, <span class="va">None</span>) <span class="kw">or</span> <span class="bu">getattr</span>(res, <span class="st">'page_content'</span>, <span class="va">None</span>) <span class="kw">or</span> <span class="bu">getattr</span>(res, <span class="st">'content'</span>, <span class="st">'No Text'</span>)</span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a>                <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>i<span class="op">+</span><span class="dv">1</span><span class="sc">}</span><span class="ss">. Source: </span><span class="sc">{</span>source<span class="sc">}</span><span class="ss">, Page: </span><span class="sc">{</span>page<span class="sc">}</span><span class="ch">\n</span><span class="ss">Text: </span><span class="sc">{</span>text<span class="sc">}</span><span class="ch">\n</span><span class="ss">"</span>)</span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"No results found for query: </span><span class="sc">{</span>query<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb25-20"><a href="#cb25-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb25-21"><a href="#cb25-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Error during vector store query: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="762def92" class="cell" data-execution_count="23">
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a>test_vector_store(vector_store, query)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="set-up-information-retriver" class="level2">
+<h2 class="anchored" data-anchor-id="set-up-information-retriver">Set up Information Retriver</h2>
+<div id="98dbea4d" class="cell" data-execution_count="24">
+<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain.chains <span class="im">import</span> RetrievalQA</span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> langchain_core.vectorstores <span class="im">import</span> VectorStoreRetriever</span>
+<span id="cb27-3"><a href="#cb27-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-4"><a href="#cb27-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> initialize_qa_system(vector_store, llm, k<span class="op">=</span><span class="dv">5</span>):</span>
+<span id="cb27-5"><a href="#cb27-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Wrap the LanceDB vector store into a retriever and initialize RetrievalQA."""</span></span>
+<span id="cb27-6"><a href="#cb27-6" aria-hidden="true" tabindex="-1"></a>    retriever <span class="op">=</span> VectorStoreRetriever(</span>
+<span id="cb27-7"><a href="#cb27-7" aria-hidden="true" tabindex="-1"></a>        vectorstore<span class="op">=</span>vector_store,</span>
+<span id="cb27-8"><a href="#cb27-8" aria-hidden="true" tabindex="-1"></a>        search_kwargs<span class="op">=</span>{<span class="st">"k"</span>: k}</span>
+<span id="cb27-9"><a href="#cb27-9" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-11"><a href="#cb27-11" aria-hidden="true" tabindex="-1"></a>    qa <span class="op">=</span> RetrievalQA.from_chain_type(</span>
+<span id="cb27-12"><a href="#cb27-12" aria-hidden="true" tabindex="-1"></a>        llm<span class="op">=</span>llm,</span>
+<span id="cb27-13"><a href="#cb27-13" aria-hidden="true" tabindex="-1"></a>        chain_type<span class="op">=</span><span class="st">"stuff"</span>,  <span class="co"># or "map_reduce" / "refine" depending on needs</span></span>
+<span id="cb27-14"><a href="#cb27-14" aria-hidden="true" tabindex="-1"></a>        retriever<span class="op">=</span>retriever,</span>
+<span id="cb27-15"><a href="#cb27-15" aria-hidden="true" tabindex="-1"></a>        return_source_documents<span class="op">=</span><span class="va">True</span></span>
+<span id="cb27-16"><a href="#cb27-16" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb27-17"><a href="#cb27-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb27-18"><a href="#cb27-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> qa</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="2d15ce34" class="cell" data-execution_count="25">
+<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>qa_system <span class="op">=</span> initialize_qa_system(vector_store, llm_accurate)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="144f1628" class="cell" data-execution_count="26">
+<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> test_hybrid_retriever(retriever, query, top_k<span class="op">=</span><span class="dv">5</span>):</span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Running hybrid search for query: '</span><span class="sc">{</span>query<span class="sc">}</span><span class="ss">'</span><span class="ch">\n</span><span class="sc">{</span><span class="st">'-'</span><span class="op">*</span><span class="dv">60</span><span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>        docs <span class="op">=</span> retriever.get_relevant_documents(query)</span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> docs:</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="st">"⚠️ No relevant documents found."</span>)</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span></span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> i, doc <span class="kw">in</span> <span class="bu">enumerate</span>(docs):</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>            source <span class="op">=</span> doc.metadata.get(<span class="st">"source"</span>, <span class="st">"Unknown"</span>)</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>            page <span class="op">=</span> doc.metadata.get(<span class="st">"page"</span>, <span class="st">"Unknown"</span>)</span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>i<span class="op">+</span><span class="dv">1</span><span class="sc">}</span><span class="ss">. Source: </span><span class="sc">{</span>source<span class="sc">}</span><span class="ss">, Page: </span><span class="sc">{</span>page<span class="sc">}</span><span class="ch">\n</span><span class="ss">Text: </span><span class="sc">{</span>doc<span class="sc">.</span>page_content[:<span class="dv">300</span>]<span class="sc">}</span><span class="ss">...</span><span class="ch">\n</span><span class="ss">"</span>)</span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"❌ Error during hybrid retrieval test: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="772b22ad" class="cell" data-execution_count="27">
+<div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>test_hybrid_retriever(initialize_qa_system, query)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="run-all-questions" class="level2">
+<h2 class="anchored" data-anchor-id="run-all-questions">Run all questions</h2>
+<div id="9a26e888" class="cell" data-execution_count="28">
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> concurrent.futures <span class="im">import</span> ThreadPoolExecutor, as_completed</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> tqdm <span class="im">import</span> tqdm</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> process_single_question(qa_system, item):</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Process a single question and return the QA pair"""</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>        result <span class="op">=</span> qa_system({<span class="st">"query"</span>: item[<span class="st">"question"</span>]})</span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> {</span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>            <span class="st">"question"</span>: item[<span class="st">"question"</span>],</span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>            <span class="st">"answer"</span>: result[<span class="st">"result"</span>],</span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"context"</span>: item[<span class="st">"context"</span>],</span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>            <span class="st">"source"</span>: item[<span class="st">"source"</span>],</span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>            <span class="st">"page"</span>: item[<span class="st">"page"</span>],</span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>            <span class="st">"source_documents"</span>: [{</span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>                <span class="st">"source"</span>: doc.metadata[<span class="st">"source"</span>],</span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a>                <span class="st">"page"</span>: doc.metadata[<span class="st">"page"</span>],</span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a>                <span class="st">"content"</span>: doc.page_content</span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>            } <span class="cf">for</span> doc <span class="kw">in</span> result[<span class="st">"source_documents"</span>]]</span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">Exception</span> <span class="im">as</span> e:</span>
+<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"Error answering question: </span><span class="sc">{</span>item[<span class="st">'question'</span>]<span class="sc">}</span><span class="ss"> - </span><span class="sc">{</span><span class="bu">str</span>(e)<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="va">None</span></span>
+<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> generate_answers(qa_system, generated_questions, max_workers<span class="op">=</span><span class="dv">4</span>):</span>
+<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Generate answers in parallel for all auto-generated questions"""</span></span>
+<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a>    qa_pairs <span class="op">=</span> []</span>
+<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb31-28"><a href="#cb31-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span>max_workers) <span class="im">as</span> executor:</span>
+<span id="cb31-29"><a href="#cb31-29" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Submit all questions to the executor</span></span>
+<span id="cb31-30"><a href="#cb31-30" aria-hidden="true" tabindex="-1"></a>        futures <span class="op">=</span> {</span>
+<span id="cb31-31"><a href="#cb31-31" aria-hidden="true" tabindex="-1"></a>            executor.submit(process_single_question, qa_system, item): item</span>
+<span id="cb31-32"><a href="#cb31-32" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> item <span class="kw">in</span> generated_questions</span>
+<span id="cb31-33"><a href="#cb31-33" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb31-34"><a href="#cb31-34" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb31-35"><a href="#cb31-35" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Process results as they complete with progress bar</span></span>
+<span id="cb31-36"><a href="#cb31-36" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> future <span class="kw">in</span> tqdm(as_completed(futures), total<span class="op">=</span><span class="bu">len</span>(generated_questions), desc<span class="op">=</span><span class="st">"Generating Answers"</span>):</span>
+<span id="cb31-37"><a href="#cb31-37" aria-hidden="true" tabindex="-1"></a>            result <span class="op">=</span> future.result()</span>
+<span id="cb31-38"><a href="#cb31-38" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> result:</span>
+<span id="cb31-39"><a href="#cb31-39" aria-hidden="true" tabindex="-1"></a>                qa_pairs.append(result)</span>
+<span id="cb31-40"><a href="#cb31-40" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb31-41"><a href="#cb31-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> qa_pairs</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="b7d688a4" class="cell" data-execution_count="29">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Generate answers</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>qa_pairs <span class="op">=</span> generate_answers(qa_system, generated_questions)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="export" class="level2">
+<h2 class="anchored" data-anchor-id="export">Export</h2>
+<div id="c37c0f5f" class="cell" data-execution_count="30">
+<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> datasets <span class="im">import</span> Dataset, DatasetDict</span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Prepare dataset</span></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>hf_dataset <span class="op">=</span> Dataset.from_list([</span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>    {<span class="st">"question"</span>: qa[<span class="st">"question"</span>], <span class="st">"answer"</span>: qa[<span class="st">"answer"</span>], <span class="st">"source"</span>: qa[<span class="st">"source"</span>]} <span class="cf">for</span> qa <span class="kw">in</span> qa_pairs</span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<section id="as-json-to-be-used-as-a-crewai-knowledge-base" class="level3">
+<h3 class="anchored" data-anchor-id="as-json-to-be-used-as-a-crewai-knowledge-base">As json to be used as a crewai knowledge base</h3>
+<div id="5503f3e3" class="cell" data-execution_count="31">
+<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> json</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>output_path <span class="op">=</span> <span class="st">"crewai_qa_knowledge_base.json"</span></span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(output_path, <span class="st">"w"</span>, encoding<span class="op">=</span><span class="st">"utf-8"</span>) <span class="im">as</span> f:</span>
+<span id="cb34-5"><a href="#cb34-5" aria-hidden="true" tabindex="-1"></a>    json.dump(qa_pairs, f, indent<span class="op">=</span><span class="dv">2</span>, ensure_ascii<span class="op">=</span><span class="va">False</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="hugging-face-for-data-labelingg" class="level3">
+<h3 class="anchored" data-anchor-id="hugging-face-for-data-labelingg">Hugging Face for data labelingg</h3>
+<div id="c2a7ff12" class="cell" data-execution_count="32">
+<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Push to Hub</span></span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> huggingface_hub <span class="im">import</span> login</span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Login first</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>login(token<span class="op">=</span>os.getenv(<span class="st">"HF_TOKEN"</span>))   </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="e86287c2" class="cell" data-execution_count="33">
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>hf_dataset.push_to_hub(<span class="st">"edouardlgp/qa-un-staff-rules"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<div class="py-4 column-screen page-columns page-full" style="background-color: #333333">
+
+  <div class="column-body">
+
+    <a href="https://www.iom.int/" target="_blank" rel="noopener noreferrer">
+
+      <img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjwhLS0gR2VuZXJhdG9yOiBBZG9iZSBJbGx1c3RyYXRvciAyNS4yLjAsIFNWRyBFeHBvcnQgUGx1Zy1JbiAuIFNWRyBWZXJzaW9uOiA2LjAwIEJ1aWxkIDApICAtLT4KCjxzdmcKICAgdmVyc2lvbj0iMS4xIgogICBpZD0iTGF5ZXJfMSIKICAgeD0iMHB4IgogICB5PSIwcHgiCiAgIHZpZXdCb3g9IjAgMCAyNTEuMTMwMDEgOTQuNjYwMDA1IgogICB4bWw6c3BhY2U9InByZXNlcnZlIgogICBzb2RpcG9kaTpkb2NuYW1lPSJpb21fbG9nb193aGl0ZS5zdmciCiAgIHdpZHRoPSIyNTEuMTMiCiAgIGhlaWdodD0iOTQuNjYwMDA0IgogICBpbmtzY2FwZTp2ZXJzaW9uPSIxLjEuMiAoMGEwMGNmNTMzOSwgMjAyMi0wMi0wNCkiCiAgIHhtbG5zOmlua3NjYXBlPSJodHRwOi8vd3d3Lmlua3NjYXBlLm9yZy9uYW1lc3BhY2VzL2lua3NjYXBlIgogICB4bWxuczpzb2RpcG9kaT0iaHR0cDovL3NvZGlwb2RpLnNvdXJjZWZvcmdlLm5ldC9EVEQvc29kaXBvZGktMC5kdGQiCiAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKICAgeG1sbnM6c3ZnPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnMKICAgaWQ9ImRlZnM5MSIgLz48c29kaXBvZGk6bmFtZWR2aWV3CiAgIGlkPSJuYW1lZHZpZXc4OSIKICAgcGFnZWNvbG9yPSIjZmZmZmZmIgogICBib3JkZXJjb2xvcj0iIzY2NjY2NiIKICAgYm9yZGVyb3BhY2l0eT0iMS4wIgogICBpbmtzY2FwZTpwYWdlc2hhZG93PSIyIgogICBpbmtzY2FwZTpwYWdlb3BhY2l0eT0iMC4wIgogICBpbmtzY2FwZTpwYWdlY2hlY2tlcmJvYXJkPSIwIgogICBzaG93Z3JpZD0iZmFsc2UiCiAgIGZpdC1tYXJnaW4tdG9wPSIwIgogICBmaXQtbWFyZ2luLWxlZnQ9IjAiCiAgIGZpdC1tYXJnaW4tcmlnaHQ9IjAiCiAgIGZpdC1tYXJnaW4tYm90dG9tPSIwIgogICBpbmtzY2FwZTp6b29tPSI1LjU3NzY4OTQiCiAgIGlua3NjYXBlOmN4PSIxMTcuNzAxMDciCiAgIGlua3NjYXBlOmN5PSI0OS4yMTM5MjciCiAgIGlua3NjYXBlOndpbmRvdy13aWR0aD0iMzQ0MCIKICAgaW5rc2NhcGU6d2luZG93LWhlaWdodD0iMTQxMiIKICAgaW5rc2NhcGU6d2luZG93LXg9IjAiCiAgIGlua3NjYXBlOndpbmRvdy15PSIwIgogICBpbmtzY2FwZTp3aW5kb3ctbWF4aW1pemVkPSIxIgogICBpbmtzY2FwZTpjdXJyZW50LWxheWVyPSJMYXllcl8xIiAvPgo8c3R5bGUKICAgdHlwZT0idGV4dC9jc3MiCiAgIGlkPSJzdHlsZTIiPgoJLnN0MHtmaWxsOiNGRkZGRkY7fQo8L3N0eWxlPgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo8ZwogICBpZD0iZzQyIgogICB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtMjcuMzMsLTYzLjYpIgogICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIj48cmVjdAogICAgIHg9IjEyMi40IgogICAgIHk9IjY0LjQwMDAwMiIKICAgICBjbGFzcz0ic3QwIgogICAgIHdpZHRoPSI4LjgyOTk5OTkiCiAgICAgaGVpZ2h0PSI2MS40NTAwMDEiCiAgICAgaWQ9InJlY3Q0IgogICAgIHN0eWxlPSJmaWxsOiNmZmZmZmY7ZmlsbC1vcGFjaXR5OjEiIC8+PHBhdGgKICAgICBjbGFzcz0ic3QwIgogICAgIGQ9Im0gMTc2LjI4LDExOC40NiBjIC0xMi44OSwwIC0yMy44OCwtOS4xOSAtMjMuODgsLTIzLjE2IDAsLTEwLjI3IDYuOTQsLTIzLjQzIDI0LjE1LC0yMy40MyAxNi4wNCwwIDIzLjc5LDEyLjg5IDIzLjc5LDIzLjA2IDAsNS4zMiAtMi4yNSwxMS45OCAtNi4xMywxNi4yMiAtNC4yMyw0LjYxIC0xMS4zNSw3LjMxIC0xNy45Myw3LjMxIG0gMzMuMDcsLTIzLjQyIGMgMCwtMTYuNDkgLTEyLjcsLTMxLjQ0IC0zMy4xNiwtMzEuNDQgLTIwLjk5LDAgLTMyLjg5LDE1LjQxIC0zMi44OSwzMS43MSAwLDE3LjEyIDEzLjE1LDMxLjM1IDMyLjQzLDMxLjM1IDIwLjEsMCAzMy42MiwtMTMuOTYgMzMuNjIsLTMxLjYyIgogICAgIGlkPSJwYXRoNiIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIiAvPjxwb2x5Z29uCiAgICAgY2xhc3M9InN0MCIKICAgICBwb2ludHM9IjIyOS45OSwxMjUuODUgMjI5Ljk5LDc4LjAxIDI0OS4wOSwxMDEuNzkgMjUwLjcxLDEwMS43OSAyNjkuNjMsNzguMDEgMjY5LjYzLDEyNS44NSAyNzguNDYsMTI1Ljg1IDI3OC40Niw2NC40IDI3MC4yNiw2NC40IDI0OS45LDg5LjYzIDIyOS40NCw2NC40IDIyMS4xNiw2NC40IDIyMS4xNiwxMjUuODUgIgogICAgIGlkPSJwb2x5Z29uOCIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIiAvPjxwYXRoCiAgICAgY2xhc3M9InN0MCIKICAgICBkPSJtIDQyLjk1LDE0OS4xMyBjIDAsMi4wMSAtMC4xOCwzLjA5IC0wLjU4LDMuODEgLTAuNTUsMC45OSAtMi4wMiwyLjcgLTUuMzksMi43IC0yLjQyLDAgLTMuOCwtMC44MSAtNC42OSwtMS43MSAtMS4wNywtMS4wNSAtMS4zMiwtMi4xIC0xLjMyLC00LjggdiAtMTEuNjIgaCAtMyB2IDExLjYyIGMgMCwxLjM4IDAsMy43NSAxLjE2LDUuNTYgMS42NSwyLjU4IDQuOSwzLjU3IDcuODQsMy41NyAyLjM5LDAgNC43MiwtMC42IDYuNTksLTIuMjIgMi4zNiwtMi4wNyAyLjM2LC00LjkzIDIuMzYsLTYuOTEgdiAtMTEuNjIgaCAtMi45NyB6IgogICAgIGlkPSJwYXRoMTAiCiAgICAgc3R5bGU9ImZpbGw6I2ZmZmZmZjtmaWxsLW9wYWNpdHk6MSIgLz48cG9seWdvbgogICAgIGNsYXNzPSJzdDAiCiAgICAgcG9pbnRzPSI3My4yMSwxMzcuNTEgNzAuMzcsMTM3LjUxIDcwLjM3LDE1My40IDU2LjI3LDEzNy41MSA1My44NSwxMzcuNTEgNTMuODUsMTU3Ljk5IDU2LjY3LDE1Ny45OSA1Ni42NywxNDIuMjMgNzAuNjQsMTU3Ljk5IDczLjIxLDE1Ny45OSAiCiAgICAgaWQ9InBvbHlnb24xMiIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIiAvPjxwb2x5Z29uCiAgICAgY2xhc3M9InN0MCIKICAgICBwb2ludHM9Ijk1LjI3LDE0Mi4wNSAxMDEuNzcsMTQ5Ljk4IDEwMi4zMiwxNDkuOTggMTA4Ljc1LDE0Mi4wNSAxMDguNzUsMTU3Ljk5IDExMS43NSwxNTcuOTkgMTExLjc1LDEzNy41MSAxMDguOTcsMTM3LjUxIDEwMi4wNCwxNDUuOTIgOTUuMDksMTM3LjUxIDkyLjI3LDEzNy41MSA5Mi4yNywxNTcuOTkgOTUuMjcsMTU3Ljk5ICIKICAgICBpZD0icG9seWdvbjE0IgogICAgIHN0eWxlPSJmaWxsOiNmZmZmZmY7ZmlsbC1vcGFjaXR5OjEiIC8+PHJlY3QKICAgICB4PSIxMjAuMDkiCiAgICAgeT0iMTM3LjUwOTk5IgogICAgIGNsYXNzPSJzdDAiCiAgICAgd2lkdGg9IjMiCiAgICAgaGVpZ2h0PSIyMC40OCIKICAgICBpZD0icmVjdDE2IgogICAgIHN0eWxlPSJmaWxsOiNmZmZmZmY7ZmlsbC1vcGFjaXR5OjEiIC8+PHBhdGgKICAgICBjbGFzcz0ic3QwIgogICAgIGQ9Im0gMTQxLjY2LDE1MC41MiBoIDQuMDEgdiA0LjI2IGMgLTEuOTksMC42MyAtMy4wMywwLjkgLTQuNTYsMC45IC01LjA1LDAgLTguMzksLTMuMzkgLTguMzksLTcuOTMgMCwtNC44NCAzLjk1LC03LjkgOC4xMiwtNy45IDEuMTYsMCAzLjk4LDAuMTggNy40MSwyLjEzIHYgLTMgYyAtMi4yNCwtMC45MyAtNC40MSwtMS43NCAtNy4zNSwtMS43NCAtNy4xNywwIC0xMS4zLDUuMjkgLTExLjMsMTAuNjkgMCw0LjY1IDMuMzQsMTAuMzMgMTEuNDMsMTAuMzMgMy40OSwwIDYuMDcsLTAuOTkgNy42NiwtMS42OCB2IC04LjY1IGggLTcuMDIgdiAyLjU5IHoiCiAgICAgaWQ9InBhdGgxOCIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIiAvPjxwYXRoCiAgICAgY2xhc3M9InN0MCIKICAgICBkPSJtIDE2My43MSwxNDYuMTYgYyAtMC44MywwLjMgLTIuNDUsMC4zIC0yLjkxLDAuMyBoIC0xLjE2IFYgMTQwIGggMC45MiBjIDEuODEsMCAyLjc5LDAuMTIgMy41NSwwLjQ4IDAuOTgsMC40NSAxLjU5LDEuNTYgMS41OSwyLjczIDAuMDEsMS4xMiAtMC41OCwyLjQxIC0xLjk5LDIuOTUgbSAxLjU3LDIuMSBjIDIuMjcsLTAuODcgMy40OSwtMi42NyAzLjQ5LC01LjA1IDAsLTIuMDcgLTEuMDQsLTQuMTEgLTMuMjgsLTUuMDUgLTEuMzIsLTAuNTcgLTIuNiwtMC42NiAtMy41OCwtMC42NiBoIC01LjI0IHYgMjAuNDggaCAyLjk3IHYgLTguOTIgaCAwLjggYyAxLjQ0LDAgMi40NSwwIDQuNSwyLjU4IDAuNjcsMC44NyAzLjU4LDUuMzUgNC4yOSw2LjM0IGggMy41NSBjIC0xLjQ0LC0xLjk4IC0xLjk2LC0yLjY3IC0yLjg1LC00LjA4IC0xLjU5LC0yLjUxIC0yLjc1LC00LjQxIC00LjY1LC01LjY0IgogICAgIGlkPSJwYXRoMjAiCiAgICAgc3R5bGU9ImZpbGw6I2ZmZmZmZjtmaWxsLW9wYWNpdHk6MSIgLz48cGF0aAogICAgIGNsYXNzPSJzdDAiCiAgICAgZD0ibSAxODIuODksMTQ5LjMxIDMuMTIsLTcuNDIgMy4zNyw3LjQyIHogbSAyLjEyLC0xMS45MiAtOC45OCwyMC42IGggMy4wNiBsIDIuNjMsLTYuMDQgaCA4Ljg4IGwgMi43OSw2LjA0IGggMy4wNiBsIC05LjM0LC0yMC42IHoiCiAgICAgaWQ9InBhdGgyMiIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIiAvPjxwb2x5Z29uCiAgICAgY2xhc3M9InN0MCIKICAgICBwb2ludHM9IjIwNC43NSwxNTcuOTkgMjA3Ljc1LDE1Ny45OSAyMDcuNzUsMTQwLjA5IDIxNS4wNCwxNDAuMDkgMjE1LjA0LDEzNy41MSAxOTcuNTgsMTM3LjUxIDE5Ny41OCwxNDAuMDkgMjA0Ljc1LDE0MC4wOSAiCiAgICAgaWQ9InBvbHlnb24yNCIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIiAvPjxyZWN0CiAgICAgeD0iMjIxLjYzIgogICAgIHk9IjEzNy41MDk5OSIKICAgICBjbGFzcz0ic3QwIgogICAgIHdpZHRoPSIzIgogICAgIGhlaWdodD0iMjAuNDgiCiAgICAgaWQ9InJlY3QyNiIKICAgICBzdHlsZT0iZmlsbDojZmZmZmZmO2ZpbGwtb3BhY2l0eToxIiAvPjxwYXRoCiAgICAgY2xhc3M9InN0MCIKICAgICBkPSJtIDI0OC4xNiwxNTMuMSBjIC0xLjQ0LDEuNTMgLTMuODYsMi40MyAtNi4xLDIuNDMgLTQuMzgsMCAtOC4xMiwtMy4wNiAtOC4xMiwtNy43MiAwLC0zLjQyIDIuMzYsLTcuODEgOC4yMSwtNy44MSA1LjQ1LDAgOC4wOSw0LjMgOC4wOSw3LjY5IDAsMS43OCAtMC43Nyw0IC0yLjA4LDUuNDEgbSAtNi4xMywtMTUuODYgYyAtNy4xNCwwIC0xMS4xOCw1LjE0IC0xMS4xOCwxMC41NyAwLDUuNzEgNC40NywxMC40NSAxMS4wMywxMC40NSA2LjgzLDAgMTEuNDMsLTQuNjYgMTEuNDMsLTEwLjU0IC0wLjAxLC01LjQ5IC00LjMzLC0xMC40OCAtMTEuMjgsLTEwLjQ4IgogICAgIGlkPSJwYXRoMjgiCiAgICAgc3R5bGU9ImZpbGw6I2ZmZmZmZjtmaWxsLW9wYWNpdHk6MSIgLz48cG9seWdvbgogICAgIGNsYXNzPSJzdDAiCiAgICAgcG9pbnRzPSIyNzguNDIsMTM3LjUxIDI3NS41NywxMzcuNTEgMjc1LjU3LDE1My40IDI2MS40OCwxMzcuNTEgMjU5LjA2LDEzNy41MSAyNTkuMDYsMTU3Ljk5IDI2MS44OCwxNTcuOTkgMjYxLjg4LDE0Mi4yMyAyNzUuODUsMTU3Ljk5IDI3OC40MiwxNTcuOTkgIgogICAgIGlkPSJwb2x5Z29uMzAiCiAgICAgc3R5bGU9ImZpbGw6I2ZmZmZmZjtmaWxsLW9wYWNpdHk6MSIgLz48cGF0aAogICAgIGNsYXNzPSJzdDAiCiAgICAgZD0ibSA1OS41Nyw4OS4zMyBjIDAuNjksMCAxLjI1LC0wLjU2IDEuMjUsLTEuMjUgMCwtMC42OSAtMC41NiwtMS4yNSAtMS4yNSwtMS4yNSAtMC42OSwwIC0xLjI1LDAuNTYgLTEuMjUsMS4yNSAwLDAuNjkgMC41NiwxLjI1IDEuMjUsMS4yNSIKICAgICBpZD0icGF0aDMyIgogICAgIHN0eWxlPSJmaWxsOiNmZmZmZmY7ZmlsbC1vcGFjaXR5OjEiIC8+PHBhdGgKICAgICBjbGFzcz0ic3QwIgogICAgIGQ9Im0gNTQuODMsOTYuODQgYyAwLjA5LDAuMDYgMC4xOSwwLjA4IDAuMjgsMC4wOCAwLjIxLDAgMC40MSwtMC4xMiAwLjQ5LC0wLjMzIGwgMi4yMywtNS4yNSAwLjE3LDUuMTEgLTAuODQsNi40OCBjIC0wLjAzLDAuMjUgMC4xLDAuNTEgMC4zNSwwLjU5IDAuMDYsMC4wMiAwLjEyLDAuMDMgMC4xOSwwLjAzIDAuMjcsMCAwLjUsLTAuMiAwLjUzLC0wLjQ3IGwgMC44LC02LjE3IGggMS4wOCBsIDAuOCw2LjE3IGMgMC4wMywwLjI3IDAuMjcsMC40NyAwLjUzLDAuNDcgMC4wNiwwIDAuMTIsLTAuMDEgMC4xOSwtMC4wMyAwLjI0LC0wLjA5IDAuMzcsLTAuMzQgMC4zNSwtMC41OSBsIC0wLjg0LC02LjQ4IDAuMTYsLTUuMTEgMi4yMyw1LjI1IGMgMCwwIDAsMCAwLDAgMC4wMSwwLjAzIDAuMDMsMC4wNiAwLjA0LDAuMDggMCwwLjAxIDAuMDEsMC4wMSAwLjAyLDAuMDIgMC4wMSwwLjAyIDAuMDMsMC4wNCAwLjA0LDAuMDYgMC4wMSwwLjAxIDAuMDEsMC4wMSAwLjAyLDAuMDIgMC4wMiwwLjAyIDAuMDQsMC4wNCAwLjA2LDAuMDUgMCwwIDAuMDEsMC4wMSAwLjAxLDAuMDEgMC4wMywwLjAyIDAuMDUsMC4wMyAwLjA4LDAuMDQgMC4wMSwwIDAuMDIsMCAwLjAyLDAuMDEgMC4wMiwwLjAxIDAuMDQsMC4wMiAwLjA3LDAuMDIgMC4wMSwwIDAuMDIsMCAwLjAzLDAuMDEgMC4wMywwLjAxIDAuMDYsMC4wMSAwLjEsMC4wMSAwLDAgMCwwIDAsMCBoIDAuNDUgbCAtMC43MiwzLjY1IGMgLTAuMDUsMC4yNiAwLjAyLDAuNTMgMC4xOCwwLjczIDAuMSwwLjEzIDAuMjQsMC4yMiAwLjM5LDAuMjcgdiAxLjU0IGMgMCwwLjI1IDAuMiwwLjQ1IDAuNDUsMC40NSAwLjI1LDAgMC40NSwtMC4yIDAuNDUsLTAuNDUgdiAtMS40OSAwIGMgMC4wMiwwIDAuMDMsMCAwLjA0LDAgaCAwLjI5IDAuMjkgdiAwIGMgMC4wMiwwIDAuMDMsMCAwLjA0LDAgdiAwIDEuNDkgYyAwLDAuMjUgMC4yLDAuNDUgMC40NSwwLjQ1IDAuMjUsMCAwLjQ1LC0wLjIgMC40NSwtMC40NSB2IC0xLjU1IGMgMC4xNSwtMC4wNSAwLjI5LC0wLjE1IDAuMzksLTAuMjcgMC4xNywtMC4yMSAwLjI0LC0wLjQ3IDAuMTgsLTAuNzMgbCAtMC43MiwtMy42NCBoIDAuNDUgdiAwIGMgMC4wMywwIDAuMDYsMCAwLjEsLTAuMDEgMC4wMSwwIDAuMDIsMCAwLjAzLC0wLjAxIDAuMDIsMCAwLjA1LC0wLjAxIDAuMDcsLTAuMDIgMC4wMSwwIDAuMDIsLTAuMDEgMC4wMiwtMC4wMSAwLjAzLC0wLjAxIDAuMDYsLTAuMDMgMC4wOCwtMC4wNCAwLDAgMC4wMSwtMC4wMSAwLjAxLC0wLjAxIDAuMDIsLTAuMDEgMC4wNCwtMC4wMyAwLjA2LC0wLjA1IDAuMDEsLTAuMDEgMC4wMSwtMC4wMSAwLjAyLC0wLjAyIDAuMDIsLTAuMDIgMC4wMywtMC4wNCAwLjA0LC0wLjA2IDAsLTAuMDEgMC4wMSwtMC4wMSAwLjAyLC0wLjAyIDAuMDIsLTAuMDMgMC4wMywtMC4wNSAwLjA0LC0wLjA4IDAsMCAwLDAgMCwwIGwgMi4zMSwtNS40NCAwLjQ1LDIuMjEgYyAwLjA3LDAuMzYgMC4wNiwwLjc0IC0wLjAzLDEuMTEgbCAtMi4xMSw5LjA5IGggMi45MSAwLjc0IDIuOTEgbCAtMi4xMSwtOS4xIGMgLTAuMDksLTAuMzUgLTAuMSwtMC43MyAtMC4wMywtMS4wOSBsIDAuNDYsLTIuMjMgMS43OCw0LjM4IGMgMC4wOCwwLjIxIDAuMjksMC4zNCAwLjUsMC4zNCAwLjA3LDAgMC4xNCwtMC4wMSAwLjIsLTAuMDQgMC4yNywtMC4xMSAwLjQxLC0wLjQzIDAuMywtMC43IGwgLTIsLTQuOSBjIC0wLjA4LC0wLjIgLTAuMjgsLTAuMzQgLTAuNSwtMC4zNCBoIC0wLjAzIC0wLjg3IC0wLjYyIC0wLjc0IC0wLjYgLTAuODkgLTAuMDEgYyAtMC4yMiwwIC0wLjQxLDAuMTMgLTAuNDksMC4zMyBsIC0yLjQsNS42NSBoIC0yLjM3IGwgLTIuNCwtNS42NSBjIC0wLjA4LC0wLjIgLTAuMjgsLTAuMzMgLTAuNSwtMC4zMyBoIC0xLjkyIC0xLjkyIGMgLTAuMjIsMCAtMC40MSwwLjEzIC0wLjQ5LDAuMzMgbCAtMi41Myw1Ljk1IGMgLTAuMDUsMC4yNCAwLjAzLDAuNTQgMC4yNiwwLjY4IgogICAgIGlkPSJwYXRoMzQiCiAgICAgc3R5bGU9ImZpbGw6I2ZmZmZmZjtmaWxsLW9wYWNpdHk6MSIgLz48cGF0aAogICAgIGNsYXNzPSJzdDAiCiAgICAgZD0ibSA3MS41LDg5LjMzIGMgMC42OSwwIDEuMjUsLTAuNTYgMS4yNSwtMS4yNSAwLC0wLjY5IC0wLjU2LC0xLjI1IC0xLjI1LC0xLjI1IC0wLjY5LDAgLTEuMjUsMC41NiAtMS4yNSwxLjI1IDAsMC42OSAwLjU2LDEuMjUgMS4yNSwxLjI1IgogICAgIGlkPSJwYXRoMzYiCiAgICAgc3R5bGU9ImZpbGw6I2ZmZmZmZjtmaWxsLW9wYWNpdHk6MSIgLz48cGF0aAogICAgIGNsYXNzPSJzdDAiCiAgICAgZD0ibSA2NS41Niw5NS41NyBjIDAuNTIsMCAwLjk0LC0wLjQyIDAuOTQsLTAuOTQgMCwtMC41MiAtMC40MiwtMC45NCAtMC45NCwtMC45NCAtMC41MiwwIC0wLjk0LDAuNDIgLTAuOTQsMC45NCAwLDAuNTIgMC40MiwwLjk0IDAuOTQsMC45NCIKICAgICBpZD0icGF0aDM4IgogICAgIHN0eWxlPSJmaWxsOiNmZmZmZmY7ZmlsbC1vcGFjaXR5OjEiIC8+PHBhdGgKICAgICBjbGFzcz0ic3QwIgogICAgIGQ9Im0gNzEuMjUsMTEyLjMxIGMgLTIuMjYsMC4xMiAtNC40LDAuNjMgLTYuMzgsMS40NSAtMi45MSwtMS4yOCAtNS42NSwtMy40OCAtNy43MiwtNi4yNCBoIDE0LjEgeiBtIDAsOS4yNSBjIC0zLjg4LC0wLjIgLTcuNTQsLTEuMjggLTEwLjgsLTMuMDcgMi44MywtMi42MyA2LjYxLC00LjMyIDEwLjgsLTQuNTggeiBNIDQ5LjY0LDEwNy41MiBoIDUuNDUgYyAyLjA1LDMuMDcgNC44MSw1LjYgNy43Nyw3LjIyIC0xLjQzLDAuOCAtMi43MywxLjc3IC0zLjg4LDIuODkgLTMuODcsLTIuNDcgLTcuMDksLTUuOTYgLTkuMzQsLTEwLjExIE0gNDYuMjksOTYuNDkgaCA1LjMyIGMgMCwwLjA1IDAsMC4xIDAsMC4xMyAwLDMuMTcgMC44OCw2LjI0IDIuMzQsOC45OCBIIDQ4LjcgYyAtMS4yNywtMi44IC0yLjEsLTUuODcgLTIuNDEsLTkuMTEgbSAtNy4xOCwtMS45MSBjIC0wLjAxLC0wLjI0IC0wLjAyLC0wLjYxIC0wLjAyLC0wLjgyIDAsLTMuMiAwLjk3LC02LjI5IDIuNTcsLTguOTggaCAzMi45OCBjIDEuNTksMi42OSAyLjU3LDUuNzggMi41Nyw4Ljk4IDAsMC4wNCAwLDAuMDggMCwwLjEzIGggLTAuMDIgbCAtMC4wMywxLjkxIGggMTQuMjMgYyAwLDAuMjQgMC4wMSwwLjYxIDAuMDEsMC44MiAwLDMuMiAtMC45Nyw2LjI5IC0yLjU3LDguOTggSCA1NS44NyBjIC0xLjU5LC0yLjY5IC0yLjU2LC01Ljc4IC0yLjU2LC04Ljk4IDAsLTAuMDQgMCwtMC4wOCAwLC0wLjEzIHYgMCBsIDAuMDMsLTEuOTEgeiBtIC03LjQyLDAgYyAwLjI2LC0zLjQ4IDEuMTIsLTYuNzkgMi40NiwtOS44IGggNS42IGMgLTEuNDYsMi43NCAtMi4zNCw1LjgxIC0yLjM0LDguOTggMCwwLjE1IDAsMC41NSAwLjAxLDAuODIgeiBNIDQ0LjY2LDcyLjY0IGMgMS4xOCwxLjE3IDIuNTMsMi4xOSA0LjAxLDMuMDIgLTIuOTYsMS42MiAtNS43Miw0LjE1IC03Ljc3LDcuMjIgaCAtNS44IGMgMi4yOSwtNC4yNCA1LjU5LC03Ljc3IDkuNTYsLTEwLjI0IG0gMTIuNjcsNS40NiB2IDQuNzggSCA0Mi45NSBjIDIuMDgsLTIuNzYgNC44MiwtNC45NiA3LjczLC02LjI0IDIuMDUsMC44NSA0LjI5LDEuMzYgNi42NSwxLjQ2IG0gMCwtOS4yOCB2IDcuNjggYyAtNC4zNiwtMC4yIC04LjMsLTEuOTYgLTExLjE5LC00LjcxIDMuMzcsLTEuODEgNy4xNywtMi44NyAxMS4xOSwtMi45NyBtIDEuOTIsOS4yNyBjIDIuMjYsLTAuMTIgNC40LC0wLjYzIDYuMzgsLTEuNDUgMi45MSwxLjI4IDUuNjUsMy40OCA3LjczLDYuMjQgSCA1OS4yNSBaIG0gMCwtOS4yNSBjIDMuODgsMC4yIDcuNTMsMS4yOCAxMC44LDMuMDcgLTIuODIsMi42MiAtNi42LDQuMzIgLTEwLjgsNC41NyB6IE0gODAuODYsODIuODggSCA3NS40IGMgLTIuMDQsLTMuMDcgLTQuOCwtNS42IC03Ljc3LC03LjIyIDEuNDIsLTAuOCAyLjczLC0xLjc3IDMuODgsLTIuODkgMy44OCwyLjQ3IDcuMSw1Ljk1IDkuMzUsMTAuMTEgbSAzLjM1LDExLjAyIGggLTUuMzIgYyAwLC0wLjA1IDAsLTAuMSAwLC0wLjEzIDAsLTMuMTcgLTAuODgsLTYuMjQgLTIuMzQsLTguOTggaCA1LjI1IGMgMS4yNywyLjgxIDIuMSw1Ljg4IDIuNDEsOS4xMSBtIDE0LjYsMS45MSBjIC0wLjI2LDMuNDggLTEuMTIsNi43OSAtMi40Niw5LjggaCAtNS42IGMgMS40NiwtMi43NCAyLjM0LC01LjgxIDIuMzQsLTguOTggMCwtMC4xNiAwLC0wLjU1IC0wLjAxLC0wLjgyIHogbSAtMTIuOTcsMjEuOTQgYyAtMS4xOCwtMS4xNyAtMi41MywtMi4xOSAtNC4wMSwtMy4wMiAyLjk2LC0xLjYyIDUuNzIsLTQuMTUgNy43NywtNy4yMiBoIDUuOCBjIC0yLjI5LDQuMjQgLTUuNTksNy43NyAtOS41NiwxMC4yNCBtIC0xMi42NywtNS40NiB2IC00Ljc4IGggMTQuMzggYyAtMi4wOCwyLjc2IC00LjgyLDQuOTYgLTcuNzMsNi4yNCAtMi4wNSwtMC44NSAtNC4yOSwtMS4zNiAtNi42NSwtMS40NiBtIDAsOS4yOSB2IC03LjY4IGMgNC4zNiwwLjIgOC4yOSwxLjk2IDExLjE5LDQuNzEgLTMuMzcsMS44MSAtNy4xNywyLjg2IC0xMS4xOSwyLjk3IG0gMjkuOTksLTI4LjI1IGMgMCwtOS43NiAtNC40NywtMjAuNjggLTExLjc1LC0yOC44MSBoIC02LjQ5IGMgMS43LDEuNTYgNC4wNiw0LjI5IDQuMDYsNC4yOSA2LjI2LDcgOS45MSwxNi4zOSA5LjkxLDI0Ljc4IDAsMC4xIDAsMC4yMSAwLDAuMzEgSCA4OC41IEMgODYuOTIsNzcuNSA3My44Niw2NC41MiA1Ny45OSw2NC41MiBjIC0xNi45MywwIC0zMC42NiwxNC41NyAtMzAuNjYsMzIuNTUgMCw5Ljc2IDQuNDgsMjAuNjggMTEuNzUsMjguODEgaCA2LjQ5IGMgLTEuNjksLTEuNTYgLTQuMDYsLTQuMjkgLTQuMDYsLTQuMjkgLTYuMjYsLTcgLTkuOTEsLTE2LjM5IC05LjkxLC0yNC43OCAwLC0wLjEgMCwtMC4yMSAwLC0wLjMxIEggNDIgYyAxLjU4LDE2LjQgMTQuNjUsMjkuMzggMzAuNTEsMjkuMzggMTYuOTMsMCAzMC42NSwtMTQuNTcgMzAuNjUsLTMyLjU1IgogICAgIGlkPSJwYXRoNDAiCiAgICAgc3R5bGU9ImZpbGw6I2ZmZmZmZjtmaWxsLW9wYWNpdHk6MSIgLz48L2c+PC9zdmc+Cg==" alt="IOM Logo" class="img-fluid" style="max-height: 2.5rem">
+
+    </a>
+
+  </div>
+
+</div>
+
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+<script src="index_files/libs/quarto-html/zenscroll-min.js"></script>
+</body></html>
