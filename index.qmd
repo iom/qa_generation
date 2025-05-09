@@ -1,5 +1,5 @@
 ---
-title: "Automated PDF Q&A Generation with Azure OpenAI"
+title: "Automated Q&A Generation from PDF files"
 subtitle: Technical Approach Paper for Knowledge Base Creation
 date: today
 author: Edouard Legoupil, Chief Data Officer, IOM
@@ -24,54 +24,31 @@ By generating Question-Answer (Q&A) pairs, we explicitly transform passive conte
 
 By transforming PDF content into a question-answering (Q&A) knowledge base, you enable:
 
-1. Instant, Precise Information Retrieval
+1. __Instant, Precise Information Retrieval__: Instead of manually searching through pages, users can ask natural language questions and get direct answers with source references. This is ideal for technical documentation, legal contracts, or academic papers where quick lookup is critical.
 
-    Instead of manually searching through pages, users can ask natural language questions and get direct answers with source references.
+2. __Scalable Knowledge Management__: Automatically process hundreds of PDFs into a structured, queryable format. It helps maintaining versioned knowledge bases (e.g., updated policy documents or research findings).
 
-    Ideal for technical documentation, legal contracts, or academic papers where quick lookup is critical.
+3. __AI-Augmented Understanding__: LLMs (like Azure OpenAI) summarize, connect concepts, and clarify dense text. It helps users grasp key points without reading entire documents.
 
-2. Scalable Knowledge Management
+4. __Integration with Chatbots & Assistants__: Deploy the Q&A system in help desks, internal wikis, or customer support via APIs. Example: Quick lookup of recommandations from past evaluation report.
 
-    Automatically process hundreds of PDFs into a structured, queryable format.
-
-    Maintain versioned knowledge bases (e.g., updated policy documents or research findings).
-
-3. AI-Augmented Understanding
-
-    LLMs (like Azure OpenAI) summarize, connect concepts, and clarify dense text.
-
-    Helps users grasp key points without reading entire documents.
-
-4. Integration with Chatbots & Assistants
-
-    Deploy the Q&A system in help desks, internal wikis, or customer support via APIs.
-
-    Example: Quick lookup of medical guidelines from research PDFs.
-
-5. Future-Proofing Knowledge
-
-    Export structured Q&A pairs to platforms like Hugging Face for community use or fine-tuning smaller models.
+5. __Future-Proofing Knowledge__: Export structured Q&A pairs to platforms like Hugging Face for community use or fine-tuning smaller models.
 
 
 ## Introduction
 
-Key Features
+The notebook present an approach based on: 
 
-    Automatic Question Generation: Uses LLM to create relevant questions from document content
+ 1. Automatic Question Generation: Uses LLM to create relevant questions from document content
 
-    Context-Aware Q&A: Maintains document context for each generated question
+ 2. Context-Aware Q&A: Maintains document context for each generated question
 
-    Two-Stage LLM Processing:
+ 3. Two-Stage LLM Processing: A Creative mode (higher temp) for question generation and an Accurate mode (lower temp) for answer generation
 
-        Creative mode (higher temp) for question generation
+ 4. Comprehensive Metadata: Tracks sources, pages, and context for all Q&A pairs
 
-        Accurate mode (lower temp) for answer generation
+ 5. CrewAI and HuggingFace-Ready Export: Structured JSON output with dataset statistics
 
-    Comprehensive Metadata: Tracks sources, pages, and context for all Q&A pairs
-
-    HuggingFace-Ready Export: Structured JSON output with dataset statistics
-
-    Interactive Mode: For manual exploration of documents
 
 ------------------------------------------------------------------------
 
@@ -250,7 +227,9 @@ pdf_folder = "pdf_documents"
 download_pdfs_from_json(pdf_urls_file, pdf_folder)
 ```
 
-## Initialize Azure OpenAI Components
+## Initialize LLM Components
+
+Here we use Azure OpenAI - but one could switch easily to [Ollama](https://ollama.com/) to run this offline on sensitive documents.
 
 ```{python}
 #| eval: false 
