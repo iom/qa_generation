@@ -33,4 +33,4 @@ This capacity can be used in multiple context, for instance:
 - Agentic models to inform the development of project proposals
 
 
-You can see the output of an example using the 117 pages long PDF for the [Staff Regulations and Staff Rules, including provisional Staff Rules, of the United Nations]("https://documents.un.org/doc/undoc/gen/n23/179/72/pdf/n2317972.pdf) here: [UN Staff Rules QA](https://huggingface.co/datasets/edouardlgp/qa-un-staff-rules/viewer
+You can see the output of an example using the 117 pages long PDF for the [Staff Regulations and Staff Rules, including provisional Staff Rules, of the United Nations](https://documents.un.org/doc/undoc/gen/n23/179/72/pdf/n2317972.pdf) here: [UN Staff Rules QA](https://huggingface.co/datasets/edouardlgp/qa-un-staff-rules/viewer
